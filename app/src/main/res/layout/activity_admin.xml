@@ -85,6 +85,34 @@
                   android:gravity="center"
                   android:padding="6dp" />
 
+              <!-- SCREENSHOT SECTION -->
+              <View android:layout_width="match_parent" android:layout_height="1dp"
+                  android:background="#CCCCCC" android:layout_marginVertical="6dp" />
+
+              <TextView
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="📸 Screenshots"
+                  android:textSize="15sp"
+                  android:textStyle="bold"
+                  android:textColor="#880E4F"
+                  android:padding="6dp" />
+
+              <Button
+                  android:id="@+id/btnTakeScreenshot"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="📸 Take Screenshot from Selected Devices"
+                  android:backgroundTint="#880E4F"
+                  android:textColor="#FFFFFF"
+                  android:layout_marginBottom="6dp" />
+
+              <androidx.recyclerview.widget.RecyclerView
+                  android:id="@+id/rvScreenshots"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:nestedScrollingEnabled="false" />
+
               <!-- SONGS LIBRARY -->
               <View android:layout_width="match_parent" android:layout_height="1dp"
                   android:background="#CCCCCC" android:layout_marginVertical="6dp" />
@@ -98,14 +126,6 @@
                   android:textColor="#1B5E20"
                   android:padding="6dp" />
 
-              <TextView
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:text="💡 Tip: Google Drive → Share → Anyone with link → Copy direct link"
-                  android:textSize="11sp"
-                  android:textColor="#757575"
-                  android:padding="4dp" />
-
               <LinearLayout
                   android:layout_width="match_parent"
                   android:layout_height="wrap_content"
@@ -116,9 +136,8 @@
                       android:layout_width="0dp"
                       android:layout_height="wrap_content"
                       android:layout_weight="1"
-                      android:hint="Song URL (MP3 / Google Drive)"
+                      android:hint="Paste song URL..."
                       android:inputType="textUri"
-                      android:background="@android:color/white"
                       android:padding="8dp" />
                   <Button
                       android:id="@+id/btnAddSongUrl"
@@ -126,7 +145,7 @@
                       android:layout_height="wrap_content"
                       android:text="Save"
                       android:layout_marginStart="4dp"
-                      android:backgroundTint="#388E3C"
+                      android:backgroundTint="#1B5E20"
                       android:textColor="#FFFFFF" />
               </LinearLayout>
 
@@ -143,19 +162,11 @@
               <TextView
                   android:layout_width="match_parent"
                   android:layout_height="wrap_content"
-                  android:text="🖼️ Wallpapers Library"
+                  android:text="🖼 Wallpapers Library"
                   android:textSize="15sp"
                   android:textStyle="bold"
-                  android:textColor="#4A148C"
+                  android:textColor="#7B1FA2"
                   android:padding="6dp" />
-
-              <TextView
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:text="💡 Tip: Google Drive → Share → Anyone with link → Copy direct link"
-                  android:textSize="11sp"
-                  android:textColor="#757575"
-                  android:padding="4dp" />
 
               <LinearLayout
                   android:layout_width="match_parent"
@@ -167,9 +178,8 @@
                       android:layout_width="0dp"
                       android:layout_height="wrap_content"
                       android:layout_weight="1"
-                      android:hint="Wallpaper URL (Image / Google Drive)"
+                      android:hint="Paste wallpaper URL..."
                       android:inputType="textUri"
-                      android:background="@android:color/white"
                       android:padding="8dp" />
                   <Button
                       android:id="@+id/btnAddWallpaperUrl"
@@ -219,4 +229,3 @@
           </LinearLayout>
       </ScrollView>
   </LinearLayout>
-  
