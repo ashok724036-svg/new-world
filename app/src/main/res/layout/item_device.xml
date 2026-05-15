@@ -1,58 +1,49 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:orientation="horizontal"
-    android:padding="10dp"
-    android:gravity="center_vertical"
-    android:background="@android:color/white"
-    android:layout_marginBottom="2dp">
+  <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:orientation="horizontal"
+      android:padding="10dp"
+      android:gravity="center_vertical"
+      android:background="@android:color/white"
+      android:layout_marginBottom="2dp">
 
-    <CheckBox
-        android:id="@+id/cbDevice"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginEnd="8dp" />
+      <CheckBox
+          android:id="@+id/cbDevice"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:layout_marginEnd="8dp" />
 
-    <LinearLayout
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:orientation="vertical">
+      <LinearLayout
+          android:layout_width="0dp"
+          android:layout_height="wrap_content"
+          android:layout_weight="1"
+          android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/tvDeviceName"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:textColor="#212121" />
+          <TextView
+              android:id="@+id/tvDeviceName"
+              android:layout_width="wrap_content"
+              android:layout_height="wrap_content"
+              android:textSize="14sp"
+              android:textStyle="bold"
+              android:textColor="#212121" />
 
-        <TextView
-            android:id="@+id/tvDeviceStatus"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textSize="12sp"
-            android:textColor="#2E7D32" />
+          <TextView
+              android:id="@+id/tvDeviceStatus"
+              android:layout_width="wrap_content"
+              android:layout_height="wrap_content"
+              android:textSize="12sp"
+              android:textColor="#2E7D32" />
 
-        <!-- Accessibility status -->
-        <TextView
-            android:id="@+id/tvAccessibilityStatus"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textSize="11sp"
-            android:textColor="#E65100"
-            android:textStyle="bold"
-            android:visibility="gone" />
+          <TextView
+              android:id="@+id/tvTaskStatus"
+              android:layout_width="wrap_content"
+              android:layout_height="wrap_content"
+              android:textSize="11sp"
+              android:textColor="#1565C0"
+              android:visibility="gone" />
 
-        <TextView
-            android:id="@+id/tvTaskStatus"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textSize="11sp"
-            android:textColor="#1565C0"
-            android:visibility="gone" />
+      </LinearLayout>
 
-    </LinearLayout>
-
-</LinearLayout>
+  </LinearLayout>
+  
