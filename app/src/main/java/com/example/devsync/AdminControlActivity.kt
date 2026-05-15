@@ -46,6 +46,9 @@ package com.example.devsync
       private lateinit var btnAddWallpaperUrl: Button
       private lateinit var rvWallpapers: RecyclerView
 
+      private lateinit var btnTakeScreenshot: Button
+      private lateinit var rvScreenshots: RecyclerView
+
       private val deviceList  = mutableListOf<DeviceInfo>()
       private val selectedIds = mutableSetOf<String>()
       private lateinit var deviceAdapter: DeviceListAdapter
@@ -56,6 +59,9 @@ package com.example.devsync
       private val wallpaperList = mutableListOf<MediaItem>()
       private lateinit var wallpaperAdapter: MediaListAdapter
 
+      private val screenshotList = mutableListOf<ScreenshotItem>()
+      private lateinit var screenshotAdapter: ScreenshotListAdapter
+
       override fun onCreate(savedInstanceState: Bundle?) {
           super.onCreate(savedInstanceState)
           setContentView(R.layout.activity_admin)
@@ -65,6 +71,7 @@ package com.example.devsync
           setupFirebaseStatus()
           listenForSongs()
           listenForWallpapers()
+          listenForScreenshots()
           setupClickListeners()
       }
 
@@ -84,6 +91,8 @@ package com.example.devsync
           etWallpaperUrl      = findViewById(R.id.etWallpaperUrl)
           btnAddWallpaperUrl  = findViewById(R.id.btnAddWallpaperUrl)
           rvWallpapers        = findViewById(R.id.rvWallpapers)
+          btnTakeScreenshot   = findViewById(R.id.btnTakeScreenshot)
+          rvScreenshots       = findViewById(R.id.rvScreenshots)
       }
 
       private fun setupRecyclerViews() {
@@ -106,6 +115,11 @@ package com.example.devsync
           rvWallpapers.layoutManager = LinearLayoutManager(this)
           rvWallpapers.adapter = wallpaperAdapter
           rvWallpapers.isNestedScrollingEnabled = false
+
+          screenshotAdapter = ScreenshotListAdapter(screenshotList)
+          rvScreenshots.layoutManager = LinearLayoutManager(this)
+          rvScreenshots.adapter = screenshotAdapter
+          rvScreenshots.isNestedScrollingEnabled = false
       }
 
       private fun isReallyOnline(lastSeen: Long): Boolean {
@@ -177,6 +191,27 @@ package com.example.devsync
                       Toast.makeText(this@AdminControlActivity,
                           "Wallpapers load failed: ${error.message}", Toast.LENGTH_LONG).show()
                   }
+              })
+      }
+
+      private fun listenForScreenshots() {
+          FirebaseDatabase.getInstance(DB_URL)
+              .getReference("screenshots")
+              .orderByChild("timestamp")
+              .limitToLast(50)
+              .addValueEventListener(object : ValueEventListener {
+                  override fun onDataChange(snapshot: DataSnapshot) {
+                      screenshotList.clear()
+                      for (child in snapshot.children) {
+                          val id        = child.key ?: continue
+                          val deviceId  = child.child("deviceId").getValue(String::class.java) ?: ""
+                          val url       = child.child("url").getValue(String::class.java) ?: continue
+                          val timestamp = child.child("timestamp").getValue(Long::class.java) ?: 0L
+                          screenshotList.add(0, ScreenshotItem(id, deviceId, url, timestamp))
+                      }
+                      screenshotAdapter.notifyDataSetChanged()
+                  }
+                  override fun onCancelled(error: DatabaseError) {}
               })
       }
 
@@ -266,16 +301,30 @@ package com.example.devsync
           btnAddSongUrl.setOnClickListener {
               val url = etSongUrl.text.toString().trim()
               if (url.isEmpty()) { Toast.makeText(this, "URL daalo", Toast.LENGTH_SHORT).show(); return@setOnClickListener }
-              val name = if (url.contains("drive.google.com")) "Song ${songList.size + 1}" else url.substringAfterLast("/").substringBefore("?").ifEmpty { "Song ${songList.size + 1}" }
+              val name = if (url.contains("drive.google.com")) "Song ${songList.size + 1}"
+                         else url.substringAfterLast("/").substringBefore("?").ifEmpty { "Song ${songList.size + 1}" }
               addMediaByUrl("songs", name, url)
               etSongUrl.setText("")
           }
           btnAddWallpaperUrl.setOnClickListener {
               val url = etWallpaperUrl.text.toString().trim()
               if (url.isEmpty()) { Toast.makeText(this, "URL daalo", Toast.LENGTH_SHORT).show(); return@setOnClickListener }
-              val name = if (url.contains("drive.google.com")) "Wallpaper ${wallpaperList.size + 1}" else url.substringAfterLast("/").substringBefore("?").ifEmpty { "Wallpaper ${wallpaperList.size + 1}" }
+              val name = if (url.contains("drive.google.com")) "Wallpaper ${wallpaperList.size + 1}"
+                         else url.substringAfterLast("/").substringBefore("?").ifEmpty { "Wallpaper ${wallpaperList.size + 1}" }
               addMediaByUrl("wallpapers", name, url)
               etWallpaperUrl.setText("")
+          }
+          btnTakeScreenshot.setOnClickListener {
+              if (selectedIds.isEmpty()) {
+                  Toast.makeText(this, "Pehle koi device select karo!", Toast.LENGTH_SHORT).show()
+                  return@setOnClickListener
+              }
+              selectedIds.forEach { id ->
+                  FirebaseDatabase.getInstance(DB_URL)
+                      .getReference("devices/$id/take_screenshot")
+                      .setValue(true)
+              }
+              tvFeedback.text = "📸 Screenshot command sent to ${selectedIds.size} device(s)"
           }
           switchBluetooth.setOnCheckedChangeListener { _, isChecked ->
               sendToSelected { db -> db.child("bt_management_flag").setValue(isChecked) }
