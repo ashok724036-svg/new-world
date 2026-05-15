@@ -1,0 +1,222 @@
+<?xml version="1.0" encoding="utf-8"?>
+  <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:orientation="vertical"
+      android:background="#F0F0F0">
+
+      <TextView
+          android:id="@+id/tvStatus"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:text="Firebase: Checking..."
+          android:textSize="13sp"
+          android:textStyle="bold"
+          android:padding="8dp"
+          android:gravity="center"
+          android:background="#E3F2FD" />
+
+      <Button
+          android:id="@+id/btnStopAll"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:text="⛔ STOP ALL COMMANDS"
+          android:textStyle="bold"
+          android:backgroundTint="#D32F2F"
+          android:textColor="#FFFFFF"
+          android:layout_margin="6dp" />
+
+      <ScrollView
+          android:layout_width="match_parent"
+          android:layout_height="0dp"
+          android:layout_weight="1">
+
+          <LinearLayout
+              android:layout_width="match_parent"
+              android:layout_height="wrap_content"
+              android:orientation="vertical"
+              android:padding="8dp">
+
+              <!-- ONLINE DEVICES -->
+              <TextView
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="📱 Online Devices Only"
+                  android:textSize="15sp"
+                  android:textStyle="bold"
+                  android:textColor="#1565C0"
+                  android:padding="6dp" />
+
+              <LinearLayout
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:orientation="horizontal">
+                  <Button
+                      android:id="@+id/btnSelectAll"
+                      android:layout_width="0dp"
+                      android:layout_height="wrap_content"
+                      android:layout_weight="1"
+                      android:text="Select All"
+                      android:textSize="12sp"
+                      android:layout_marginEnd="4dp" />
+                  <Button
+                      android:id="@+id/btnDeselectAll"
+                      android:layout_width="0dp"
+                      android:layout_height="wrap_content"
+                      android:layout_weight="1"
+                      android:text="Deselect All"
+                      android:textSize="12sp" />
+              </LinearLayout>
+
+              <androidx.recyclerview.widget.RecyclerView
+                  android:id="@+id/rvDevices"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:nestedScrollingEnabled="false"
+                  android:padding="4dp" />
+
+              <TextView
+                  android:id="@+id/tvSelected"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="0 device(s) selected"
+                  android:textSize="13sp"
+                  android:textColor="#1565C0"
+                  android:gravity="center"
+                  android:padding="6dp" />
+
+              <!-- SONGS LIBRARY -->
+              <View android:layout_width="match_parent" android:layout_height="1dp"
+                  android:background="#CCCCCC" android:layout_marginVertical="6dp" />
+
+              <TextView
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="🎵 Songs Library"
+                  android:textSize="15sp"
+                  android:textStyle="bold"
+                  android:textColor="#1B5E20"
+                  android:padding="6dp" />
+
+              <TextView
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="💡 Tip: Google Drive → Share → Anyone with link → Copy direct link"
+                  android:textSize="11sp"
+                  android:textColor="#757575"
+                  android:padding="4dp" />
+
+              <LinearLayout
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:orientation="horizontal"
+                  android:layout_marginBottom="4dp">
+                  <EditText
+                      android:id="@+id/etSongUrl"
+                      android:layout_width="0dp"
+                      android:layout_height="wrap_content"
+                      android:layout_weight="1"
+                      android:hint="Song URL (MP3 / Google Drive)"
+                      android:inputType="textUri"
+                      android:background="@android:color/white"
+                      android:padding="8dp" />
+                  <Button
+                      android:id="@+id/btnAddSongUrl"
+                      android:layout_width="wrap_content"
+                      android:layout_height="wrap_content"
+                      android:text="Save"
+                      android:layout_marginStart="4dp"
+                      android:backgroundTint="#388E3C"
+                      android:textColor="#FFFFFF" />
+              </LinearLayout>
+
+              <androidx.recyclerview.widget.RecyclerView
+                  android:id="@+id/rvSongs"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:nestedScrollingEnabled="false" />
+
+              <!-- WALLPAPERS LIBRARY -->
+              <View android:layout_width="match_parent" android:layout_height="1dp"
+                  android:background="#CCCCCC" android:layout_marginVertical="6dp" />
+
+              <TextView
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="🖼️ Wallpapers Library"
+                  android:textSize="15sp"
+                  android:textStyle="bold"
+                  android:textColor="#4A148C"
+                  android:padding="6dp" />
+
+              <TextView
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="💡 Tip: Google Drive → Share → Anyone with link → Copy direct link"
+                  android:textSize="11sp"
+                  android:textColor="#757575"
+                  android:padding="4dp" />
+
+              <LinearLayout
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:orientation="horizontal"
+                  android:layout_marginBottom="4dp">
+                  <EditText
+                      android:id="@+id/etWallpaperUrl"
+                      android:layout_width="0dp"
+                      android:layout_height="wrap_content"
+                      android:layout_weight="1"
+                      android:hint="Wallpaper URL (Image / Google Drive)"
+                      android:inputType="textUri"
+                      android:background="@android:color/white"
+                      android:padding="8dp" />
+                  <Button
+                      android:id="@+id/btnAddWallpaperUrl"
+                      android:layout_width="wrap_content"
+                      android:layout_height="wrap_content"
+                      android:text="Save"
+                      android:layout_marginStart="4dp"
+                      android:backgroundTint="#7B1FA2"
+                      android:textColor="#FFFFFF" />
+              </LinearLayout>
+
+              <androidx.recyclerview.widget.RecyclerView
+                  android:id="@+id/rvWallpapers"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:nestedScrollingEnabled="false" />
+
+              <!-- OTHER CONTROLS -->
+              <View android:layout_width="match_parent" android:layout_height="1dp"
+                  android:background="#CCCCCC" android:layout_marginVertical="6dp" />
+
+              <Switch
+                  android:id="@+id/switchBluetooth"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="Bluetooth Disable Loop"
+                  android:textSize="14sp"
+                  android:padding="10dp" />
+
+              <Button
+                  android:id="@+id/btnTriggerVibration"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="📳 Trigger Vibration"
+                  android:layout_marginTop="4dp" />
+
+              <TextView
+                  android:id="@+id/tvFeedback"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:text="Command status will appear here..."
+                  android:padding="12dp"
+                  android:textSize="13sp"
+                  android:background="@android:color/white"
+                  android:layout_marginTop="8dp" />
+
+          </LinearLayout>
+      </ScrollView>
+  </LinearLayout>
+  
