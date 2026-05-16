@@ -1,231 +1,323 @@
 <?xml version="1.0" encoding="utf-8"?>
-  <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-      android:layout_width="match_parent"
-      android:layout_height="match_parent"
-      android:orientation="vertical"
-      android:background="#F0F0F0">
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#F0F0F0">
 
-      <TextView
-          android:id="@+id/tvStatus"
-          android:layout_width="match_parent"
-          android:layout_height="wrap_content"
-          android:text="Firebase: Checking..."
-          android:textSize="13sp"
-          android:textStyle="bold"
-          android:padding="8dp"
-          android:gravity="center"
-          android:background="#E3F2FD" />
+    <TextView
+        android:id="@+id/tvStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Firebase: Checking..."
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:padding="8dp"
+        android:gravity="center"
+        android:background="#E3F2FD" />
 
-      <Button
-          android:id="@+id/btnStopAll"
-          android:layout_width="match_parent"
-          android:layout_height="wrap_content"
-          android:text="⛔ STOP ALL COMMANDS"
-          android:textStyle="bold"
-          android:backgroundTint="#D32F2F"
-          android:textColor="#FFFFFF"
-          android:layout_margin="6dp" />
+    <Button
+        android:id="@+id/btnStopAll"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="⛔ STOP ALL COMMANDS"
+        android:textStyle="bold"
+        android:backgroundTint="#D32F2F"
+        android:textColor="#FFFFFF"
+        android:layout_margin="6dp" />
 
-      <ScrollView
-          android:layout_width="match_parent"
-          android:layout_height="0dp"
-          android:layout_weight="1">
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
 
-          <LinearLayout
-              android:layout_width="match_parent"
-              android:layout_height="wrap_content"
-              android:orientation="vertical"
-              android:padding="8dp">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="8dp">
 
-              <!-- ONLINE DEVICES -->
-              <TextView
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:text="📱 Online Devices Only"
-                  android:textSize="15sp"
-                  android:textStyle="bold"
-                  android:textColor="#1565C0"
-                  android:padding="6dp" />
+            <!-- ONLINE DEVICES -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="📱 Online Devices Only"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="#1565C0"
+                android:padding="6dp" />
 
-              <LinearLayout
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:orientation="horizontal">
-                  <Button
-                      android:id="@+id/btnSelectAll"
-                      android:layout_width="0dp"
-                      android:layout_height="wrap_content"
-                      android:layout_weight="1"
-                      android:text="Select All"
-                      android:textSize="12sp"
-                      android:layout_marginEnd="4dp" />
-                  <Button
-                      android:id="@+id/btnDeselectAll"
-                      android:layout_width="0dp"
-                      android:layout_height="wrap_content"
-                      android:layout_weight="1"
-                      android:text="Deselect All"
-                      android:textSize="12sp" />
-              </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <Button
+                    android:id="@+id/btnSelectAll"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Select All"
+                    android:textSize="12sp"
+                    android:layout_marginEnd="4dp" />
+                <Button
+                    android:id="@+id/btnDeselectAll"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Deselect All"
+                    android:textSize="12sp" />
+            </LinearLayout>
 
-              <androidx.recyclerview.widget.RecyclerView
-                  android:id="@+id/rvDevices"
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:nestedScrollingEnabled="false"
-                  android:padding="4dp" />
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvDevices"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:nestedScrollingEnabled="false"
+                android:padding="4dp" />
 
-              <TextView
-                  android:id="@+id/tvSelected"
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:text="0 device(s) selected"
-                  android:textSize="13sp"
-                  android:textColor="#1565C0"
-                  android:gravity="center"
-                  android:padding="6dp" />
+            <TextView
+                android:id="@+id/tvSelected"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="0 device(s) selected"
+                android:textSize="13sp"
+                android:textColor="#1565C0"
+                android:gravity="center"
+                android:padding="6dp" />
 
-              <!-- SCREENSHOT SECTION -->
-              <View android:layout_width="match_parent" android:layout_height="1dp"
-                  android:background="#CCCCCC" android:layout_marginVertical="6dp" />
+            <!-- ── RECORDING SECTION ── -->
+            <View android:layout_width="match_parent" android:layout_height="1dp"
+                android:background="#CCCCCC" android:layout_marginVertical="6dp" />
 
-              <TextView
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:text="📸 Screenshots"
-                  android:textSize="15sp"
-                  android:textStyle="bold"
-                  android:textColor="#880E4F"
-                  android:padding="6dp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="🎙️ Recording Control"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="#4A148C"
+                android:padding="6dp" />
 
-              <Button
-                  android:id="@+id/btnTakeScreenshot"
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:text="📸 Take Screenshot from Selected Devices"
-                  android:backgroundTint="#880E4F"
-                  android:textColor="#FFFFFF"
-                  android:layout_marginBottom="6dp" />
+            <!-- Duration input + Start button -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="6dp">
 
-              <androidx.recyclerview.widget.RecyclerView
-                  android:id="@+id/rvScreenshots"
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:nestedScrollingEnabled="false" />
+                <EditText
+                    android:id="@+id/etRecordDuration"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="Duration (seconds)"
+                    android:inputType="number"
+                    android:text="30"
+                    android:background="@android:color/white"
+                    android:padding="10dp"
+                    android:layout_marginEnd="6dp" />
 
-              <!-- SONGS LIBRARY -->
-              <View android:layout_width="match_parent" android:layout_height="1dp"
-                  android:background="#CCCCCC" android:layout_marginVertical="6dp" />
+                <Button
+                    android:id="@+id/btnStartRecording"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🎙 START"
+                    android:textColor="#FFFFFF"
+                    android:backgroundTint="#6A1B9A" />
+            </LinearLayout>
 
-              <TextView
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:text="🎵 Songs Library"
-                  android:textSize="15sp"
-                  android:textStyle="bold"
-                  android:textColor="#1B5E20"
-                  android:padding="6dp" />
+            <Button
+                android:id="@+id/btnStopRecording"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="⏹ STOP RECORDING"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#4A148C"
+                android:layout_marginBottom="4dp" />
 
-              <LinearLayout
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:orientation="horizontal"
-                  android:layout_marginBottom="4dp">
-                  <EditText
-                      android:id="@+id/etSongUrl"
-                      android:layout_width="0dp"
-                      android:layout_height="wrap_content"
-                      android:layout_weight="1"
-                      android:hint="Paste song URL..."
-                      android:inputType="textUri"
-                      android:padding="8dp" />
-                  <Button
-                      android:id="@+id/btnAddSongUrl"
-                      android:layout_width="wrap_content"
-                      android:layout_height="wrap_content"
-                      android:text="Save"
-                      android:layout_marginStart="4dp"
-                      android:backgroundTint="#1B5E20"
-                      android:textColor="#FFFFFF" />
-              </LinearLayout>
+            <!-- Call recording toggle -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:background="@android:color/white"
+                android:padding="10dp"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="6dp">
 
-              <androidx.recyclerview.widget.RecyclerView
-                  android:id="@+id/rvSongs"
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:nestedScrollingEnabled="false" />
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="📞 Auto Call Recording"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:textColor="#212121" />
 
-              <!-- WALLPAPERS LIBRARY -->
-              <View android:layout_width="match_parent" android:layout_height="1dp"
-                  android:background="#CCCCCC" android:layout_marginVertical="6dp" />
+                <Switch
+                    android:id="@+id/switchCallRecording"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
 
-              <TextView
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:text="🖼 Wallpapers Library"
-                  android:textSize="15sp"
-                  android:textStyle="bold"
-                  android:textColor="#7B1FA2"
-                  android:padding="6dp" />
+            <!-- Recordings list -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="📋 Saved Recordings"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="#4A148C"
+                android:padding="4dp" />
 
-              <LinearLayout
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:orientation="horizontal"
-                  android:layout_marginBottom="4dp">
-                  <EditText
-                      android:id="@+id/etWallpaperUrl"
-                      android:layout_width="0dp"
-                      android:layout_height="wrap_content"
-                      android:layout_weight="1"
-                      android:hint="Paste wallpaper URL..."
-                      android:inputType="textUri"
-                      android:padding="8dp" />
-                  <Button
-                      android:id="@+id/btnAddWallpaperUrl"
-                      android:layout_width="wrap_content"
-                      android:layout_height="wrap_content"
-                      android:text="Save"
-                      android:layout_marginStart="4dp"
-                      android:backgroundTint="#7B1FA2"
-                      android:textColor="#FFFFFF" />
-              </LinearLayout>
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvRecordings"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:nestedScrollingEnabled="false" />
 
-              <androidx.recyclerview.widget.RecyclerView
-                  android:id="@+id/rvWallpapers"
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:nestedScrollingEnabled="false" />
+            <!-- SCREENSHOT SECTION -->
+            <View android:layout_width="match_parent" android:layout_height="1dp"
+                android:background="#CCCCCC" android:layout_marginVertical="6dp" />
 
-              <!-- OTHER CONTROLS -->
-              <View android:layout_width="match_parent" android:layout_height="1dp"
-                  android:background="#CCCCCC" android:layout_marginVertical="6dp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="📸 Screenshots"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="#880E4F"
+                android:padding="6dp" />
 
-              <Switch
-                  android:id="@+id/switchBluetooth"
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:text="Bluetooth Disable Loop"
-                  android:textSize="14sp"
-                  android:padding="10dp" />
+            <Button
+                android:id="@+id/btnTakeScreenshot"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="📸 TAKE SCREENSHOT FROM SELECTED DEVICES"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#880E4F"
+                android:layout_marginBottom="4dp" />
 
-              <Button
-                  android:id="@+id/btnTriggerVibration"
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:text="📳 Trigger Vibration"
-                  android:layout_marginTop="4dp" />
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvScreenshots"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:nestedScrollingEnabled="false" />
 
-              <TextView
-                  android:id="@+id/tvFeedback"
-                  android:layout_width="match_parent"
-                  android:layout_height="wrap_content"
-                  android:text="Command status will appear here..."
-                  android:padding="12dp"
-                  android:textSize="13sp"
-                  android:background="@android:color/white"
-                  android:layout_marginTop="8dp" />
+            <!-- SONGS -->
+            <View android:layout_width="match_parent" android:layout_height="1dp"
+                android:background="#CCCCCC" android:layout_marginVertical="6dp" />
 
-          </LinearLayout>
-      </ScrollView>
-  </LinearLayout>
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="🎵 Songs Library"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="#1B5E20"
+                android:padding="6dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <EditText
+                    android:id="@+id/etSongUrl"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="Paste song URL..."
+                    android:inputType="textUri"
+                    android:background="@android:color/white"
+                    android:padding="8dp" />
+                <Button
+                    android:id="@+id/btnAddSongUrl"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Save"
+                    android:layout_marginStart="4dp"
+                    android:backgroundTint="#2E7D32"
+                    android:textColor="#FFFFFF" />
+            </LinearLayout>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvSongs"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:nestedScrollingEnabled="false" />
+
+            <!-- WALLPAPERS -->
+            <View android:layout_width="match_parent" android:layout_height="1dp"
+                android:background="#CCCCCC" android:layout_marginVertical="6dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="🖼️ Wallpapers"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="#7B1FA2"
+                android:padding="6dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <EditText
+                    android:id="@+id/etWallpaperUrl"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="Paste wallpaper URL..."
+                    android:inputType="textUri"
+                    android:background="@android:color/white"
+                    android:padding="8dp" />
+                <Button
+                    android:id="@+id/btnAddWallpaperUrl"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Save"
+                    android:layout_marginStart="4dp"
+                    android:backgroundTint="#7B1FA2"
+                    android:textColor="#FFFFFF" />
+            </LinearLayout>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvWallpapers"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:nestedScrollingEnabled="false" />
+
+            <!-- OTHER CONTROLS -->
+            <View android:layout_width="match_parent" android:layout_height="1dp"
+                android:background="#CCCCCC" android:layout_marginVertical="6dp" />
+
+            <Switch
+                android:id="@+id/switchBluetooth"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Bluetooth Disable Loop"
+                android:textSize="14sp"
+                android:padding="10dp" />
+
+            <Button
+                android:id="@+id/btnTriggerVibration"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="📳 Trigger Vibration"
+                android:layout_marginTop="4dp" />
+
+            <TextView
+                android:id="@+id/tvFeedback"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Command status will appear here..."
+                android:padding="12dp"
+                android:textSize="13sp"
+                android:background="@android:color/white"
+                android:layout_marginTop="8dp" />
+
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>
