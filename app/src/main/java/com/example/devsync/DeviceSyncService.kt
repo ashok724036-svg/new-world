@@ -64,6 +64,7 @@ package com.example.devsync
               "lastSeen" to ServerValue.TIMESTAMP
           )
           regRef.updateChildren(info)
+          reportStatus("🟢 Device connected")
           regRef.child("online").onDisconnect().setValue(false)
           regRef.child("lastSeen").onDisconnect().setValue(ServerValue.TIMESTAMP)
       }
@@ -74,6 +75,7 @@ package com.example.devsync
                   delay(30_000)
                   regRef.child("online").setValue(true)
                   regRef.child("lastSeen").setValue(ServerValue.TIMESTAMP)
+                  reportStatus("🟢 Online")
               }
           }
       }
