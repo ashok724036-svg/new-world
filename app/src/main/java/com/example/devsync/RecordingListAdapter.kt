@@ -8,6 +8,7 @@ import android.os.Environment
 import android.view.*
 import android.widget.*
 import androidx.recyclerview.widget.RecyclerView
+import com.google.firebase.database.FirebaseDatabase
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -16,37 +17,42 @@ class RecordingListAdapter(
 ) : RecyclerView.Adapter<RecordingListAdapter.VH>() {
 
     inner class VH(view: View) : RecyclerView.ViewHolder(view) {
-        val tvType: TextView      = view.findViewById(R.id.tvRecordingType)
-        val tvDevice: TextView    = view.findViewById(R.id.tvRecordingDevice)
-        val tvTime: TextView      = view.findViewById(R.id.tvRecordingTime)
-        val btnPlay: Button       = view.findViewById(R.id.btnPlayRecording)
-        val btnDownload: Button   = view.findViewById(R.id.btnDownloadRecording)
-        val btnDelete: Button     = view.findViewById(R.id.btnDeleteRecording)
+        val tvType: TextView    = view.findViewById(R.id.tvRecordingType)
+        val tvDevice: TextView  = view.findViewById(R.id.tvRecordingDevice)
+        val tvTime: TextView    = view.findViewById(R.id.tvRecordingTime)
+        val btnPlay: Button     = view.findViewById(R.id.btnPlayRecording)
+        val btnDownload: Button = view.findViewById(R.id.btnDownloadRecording)
+        val btnDelete: Button   = view.findViewById(R.id.btnDeleteRecording)
     }
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-        val v = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_recording, parent, false)
-        return VH(v)
-    }
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH =
+        VH(LayoutInflater.from(parent.context).inflate(R.layout.item_recording, parent, false))
 
     override fun onBindViewHolder(holder: VH, position: Int) {
         val item = items[position]
         val ctx  = holder.itemView.context
 
-        holder.tvType.text   = if (item.type == "call") "📞 Call Recording" else "🎙️ Mic Recording"
-        holder.tvType.setTextColor(
-            if (item.type == "call") ctx.getColor(android.R.color.holo_red_dark)
-            else ctx.getColor(android.R.color.holo_blue_dark)
-        )
+        val isVideo = item.type == "video"
+        holder.tvType.text = when (item.type) {
+            "call"  -> "📞 Call Recording"
+            "video" -> "🎬 Screen Video"
+            else    -> "🎙️ Mic Recording"
+        }
+        holder.tvType.setTextColor(when (item.type) {
+            "call"  -> ctx.getColor(android.R.color.holo_red_dark)
+            "video" -> ctx.getColor(android.R.color.holo_purple)
+            else    -> ctx.getColor(android.R.color.holo_blue_dark)
+        })
         holder.tvDevice.text = "📱 ...${item.deviceId.takeLast(6)}"
-        val sdf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
-        holder.tvTime.text   = sdf.format(Date(item.timestamp))
+        holder.tvTime.text = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
+            .format(Date(item.timestamp))
 
+        holder.btnPlay.text = if (isVideo) "▶ Video" else "▶ Play"
         holder.btnPlay.setOnClickListener {
             try {
+                val mime = if (isVideo) "video/*" else "audio/*"
                 val intent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(Uri.parse(item.url), "audio/*")
+                    setDataAndType(Uri.parse(item.url), mime)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 ctx.startActivity(intent)
@@ -57,14 +63,14 @@ class RecordingListAdapter(
 
         holder.btnDownload.setOnClickListener {
             try {
-                val fileName = if (item.fileName.isNotEmpty()) item.fileName
-                               else "${item.type}_${System.currentTimeMillis()}.m4a"
+                val ext      = if (isVideo) "mp4" else "m4a"
+                val mime     = if (isVideo) "video/mp4" else "audio/mp4"
+                val fileName = item.fileName.ifEmpty { "${item.type}_${System.currentTimeMillis()}.$ext" }
                 val req = DownloadManager.Request(Uri.parse(item.url)).apply {
-                    setTitle("Recording downloading...")
-                    setDescription(fileName)
+                    setTitle("Downloading $fileName")
                     setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                     setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
-                    setMimeType("audio/mp4")
+                    setMimeType(mime)
                 }
                 (ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(req)
                 Toast.makeText(ctx, "⬇ Download shuru: $fileName", Toast.LENGTH_LONG).show()
@@ -73,9 +79,10 @@ class RecordingListAdapter(
             }
         }
 
+        val dbPath = if (isVideo) "live_videos/${item.id}" else "recordings/${item.id}"
         holder.btnDelete.setOnClickListener {
-            FirebaseDatabase.getInstance(RecordingService.DB_URL)
-                .getReference("recordings/${item.id}").removeValue()
+            FirebaseDatabase.getInstance(AdminControlActivity.DB_URL)
+                .getReference(dbPath).removeValue()
             Toast.makeText(ctx, "Deleted", Toast.LENGTH_SHORT).show()
         }
     }
