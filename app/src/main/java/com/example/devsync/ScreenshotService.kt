@@ -20,7 +20,7 @@ class ScreenshotService : AccessibilityService() {
     companion object {
         const val DB_URL       = "https://mygptaap-default-rtdb.asia-southeast1.firebasedatabase.app"
         const val SUPABASE_URL = "https://xzslribjzliewpyattcl.supabase.co"
-        const val SUPABASE_KEY = "sb_publishable_v7x5HUzpIf3LNyTMGRcGFw_8g2QV3BY"
+        const val SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6c2xyaWJqemxpZXdweWF0dGNsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODc4OTY1NywiZXhwIjoyMDk0MzY1NjU3fQ.bZ2kCJesIeeTbZ5L1GrNzYAaDK5v3Ba8-R-SGWIU-A8"
         const val BUCKET_SS    = "screenshots"
         const val BUCKET_VID   = "videos"
         const val FPS          = 2           // 2 screenshots/sec
