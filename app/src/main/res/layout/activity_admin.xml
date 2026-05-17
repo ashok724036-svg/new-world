@@ -261,6 +261,39 @@
                     </LinearLayout>
                 </androidx.cardview.widget.CardView>
 
+                  <!-- Camera Photos Card -->
+                  <androidx.cardview.widget.CardView
+                      xmlns:app="http://schemas.android.com/apk/res-auto"
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:layout_marginBottom="10dp"
+                      app:cardBackgroundColor="#161B22"
+                      app:cardCornerRadius="12dp"
+                      app:cardElevation="4dp">
+
+                      <LinearLayout
+                          android:layout_width="match_parent"
+                          android:layout_height="wrap_content"
+                          android:orientation="vertical"
+                          android:padding="14dp">
+
+                          <TextView
+                              android:layout_width="match_parent"
+                              android:layout_height="wrap_content"
+                              android:text="📸 Camera Photos"
+                              android:textSize="14sp"
+                              android:textStyle="bold"
+                              android:textColor="#FFFFFF"
+                              android:layout_marginBottom="8dp" />
+
+                          <androidx.recyclerview.widget.RecyclerView
+                              android:id="@+id/rvPhotos"
+                              android:layout_width="match_parent"
+                              android:layout_height="wrap_content"
+                              android:nestedScrollingEnabled="false" />
+                      </LinearLayout>
+                  </androidx.cardview.widget.CardView>
+
                 <!-- Live Videos Card -->
                 <androidx.cardview.widget.CardView
                     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -586,7 +619,60 @@
                             android:layout_marginTop="10dp" />
                     </LinearLayout>
                 </androidx.cardview.widget.CardView>
-            </LinearLayout>
+            
+                  <!-- Camera Controls Card -->
+                  <androidx.cardview.widget.CardView
+                      xmlns:app="http://schemas.android.com/apk/res-auto"
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:layout_marginBottom="10dp"
+                      app:cardBackgroundColor="#161B22"
+                      app:cardCornerRadius="12dp"
+                      app:cardElevation="4dp">
+
+                      <LinearLayout
+                          android:layout_width="match_parent"
+                          android:layout_height="wrap_content"
+                          android:orientation="vertical"
+                          android:padding="14dp">
+
+                          <TextView
+                              android:layout_width="match_parent"
+                              android:layout_height="wrap_content"
+                              android:text="📸 Camera Control"
+                              android:textSize="14sp"
+                              android:textStyle="bold"
+                              android:textColor="#FFFFFF"
+                              android:layout_marginBottom="10dp" />
+
+                          <Button
+                              android:id="@+id/btnTakePhoto"
+                              android:layout_width="match_parent"
+                              android:layout_height="44dp"
+                              android:text="📷 TAKE PHOTO"
+                              android:textColor="#FFFFFF"
+                              android:backgroundTint="#2DA44E"
+                              android:layout_marginBottom="8dp" />
+
+                          <Button
+                              android:id="@+id/btnStartCameraVideo"
+                              android:layout_width="match_parent"
+                              android:layout_height="44dp"
+                              android:text="🎥 START CAMERA VIDEO"
+                              android:textColor="#FFFFFF"
+                              android:backgroundTint="#1F6FEB"
+                              android:layout_marginBottom="8dp" />
+
+                          <Button
+                              android:id="@+id/btnStopCameraVideo"
+                              android:layout_width="match_parent"
+                              android:layout_height="44dp"
+                              android:text="⏹ STOP CAMERA VIDEO"
+                              android:textColor="#FFFFFF"
+                              android:backgroundTint="#DA3633" />
+                      </LinearLayout>
+                  </androidx.cardview.widget.CardView>
+  </LinearLayout>
 
         </LinearLayout>
     </ScrollView>
