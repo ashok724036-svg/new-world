@@ -79,7 +79,7 @@ class RecordingListAdapter(
             }
         }
 
-        val dbPath = if (isVideo) "live_videos/${item.id}" else "recordings/${item.id}"
+        val dbPath = "recordings/${item.id}"  // videos also stored in recordings node now
         holder.btnDelete.setOnClickListener {
             FirebaseDatabase.getInstance(AdminControlActivity.DB_URL)
                 .getReference(dbPath).removeValue()
