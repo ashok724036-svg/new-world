@@ -1,6 +1,7 @@
 package com.example.devsync
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.media.*
 import android.os.Build
 import android.view.Surface
@@ -9,14 +10,37 @@ import java.nio.ByteBuffer
 
 object VideoEncoderHelper {
 
-    fun encode(frames: List<Bitmap>, fps: Int, outFile: File): Boolean {
-        if (frames.isEmpty()) return false
+    /** Encode from in-memory bitmaps (existing API — kept for compatibility) */
+    fun encode(frames: List<Bitmap>, fps: Int, outFile: File): Boolean =
+        encodeInternal(frames.size, fps, outFile) { idx ->
+            frames[idx]
+        }
 
-        // Dimensions must be even for H.264
-        val w = frames[0].width.let  { if (it % 2 == 0) it else it - 1 }
-        val h = frames[0].height.let { if (it % 2 == 0) it else it - 1 }
+    /** Encode from JPEG files on disk — one bitmap in memory at a time, no OOM */
+    fun encodeFromFiles(files: List<File>, fps: Int, outFile: File): Boolean =
+        encodeInternal(files.size, fps, outFile) { idx ->
+            BitmapFactory.decodeFile(files[idx].absolutePath)
+        }
 
-        val muxer = MediaMuxer(outFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+    /**
+     * Core encoder — [frameCount] frames, loaded one at a time via [getFrame].
+     * Caller must NOT hold extra references; each bitmap is recycled after use.
+     */
+    private fun encodeInternal(
+        frameCount: Int,
+        fps: Int,
+        outFile: File,
+        getFrame: (Int) -> Bitmap?
+    ): Boolean {
+        if (frameCount == 0) return false
+
+        // Determine dimensions from first frame
+        val first = getFrame(0) ?: return false
+        val w = first.width.let  { if (it % 2 == 0) it else it - 1 }
+        val h = first.height.let { if (it % 2 == 0) it else it - 1 }
+        first.recycle()
+
+        val muxer  = MediaMuxer(outFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
         val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, w, h).apply {
             setInteger(MediaFormat.KEY_BIT_RATE, 1_200_000)
             setInteger(MediaFormat.KEY_FRAME_RATE, fps)
@@ -36,34 +60,37 @@ object VideoEncoderHelper {
         val usPerFrame   = 1_000_000L / fps
 
         try {
-            frames.forEachIndexed { idx, bitmap ->
-                // Draw frame onto codec surface
+            for (idx in 0 until frameCount) {
+                val bitmap = getFrame(idx) ?: continue
+
+                // Draw onto codec surface
                 val canvas = if (Build.VERSION.SDK_INT >= 23)
                     surface.lockHardwareCanvas()
                 else
                     surface.lockCanvas(null)
+
                 if (canvas != null) {
                     val scaled = Bitmap.createScaledBitmap(bitmap, w, h, false)
                     canvas.drawBitmap(scaled, 0f, 0f, null)
                     surface.unlockCanvasAndPost(canvas)
                     if (scaled !== bitmap) scaled.recycle()
                 }
+                bitmap.recycle() // free immediately — crucial for file-based path
 
-                // Drain any available output from encoder
+                // Drain encoder output
                 drain@ while (true) {
                     val outIdx = codec.dequeueOutputBuffer(info, 0L)
                     when {
                         outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                             trackIndex = muxer.addTrack(codec.outputFormat)
-                            muxer.start()
-                            muxerStarted = true
+                            muxer.start(); muxerStarted = true
                         }
                         outIdx >= 0 -> {
                             if (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0
                                 && info.size > 0 && muxerStarted) {
                                 info.presentationTimeUs = idx * usPerFrame
-                                val buf: ByteBuffer = codec.getOutputBuffer(outIdx)!!
-                                muxer.writeSampleData(trackIndex, buf, info)
+                                muxer.writeSampleData(trackIndex,
+                                    codec.getOutputBuffer(outIdx)!!, info)
                             }
                             codec.releaseOutputBuffer(outIdx, false)
                             if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break@drain
@@ -73,27 +100,25 @@ object VideoEncoderHelper {
                 }
             }
 
-            // Signal end of stream
+            // Signal EOS and drain remaining
             codec.signalEndOfInputStream()
-
-            // Drain remaining frames until EOS
+            val endPts = frameCount * usPerFrame
             var eos = false
-            val endPts = frames.size * usPerFrame
             while (!eos) {
                 val outIdx = codec.dequeueOutputBuffer(info, 5_000L)
                 when {
                     outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                         if (!muxerStarted) {
                             trackIndex = muxer.addTrack(codec.outputFormat)
-                            muxer.start()
-                            muxerStarted = true
+                            muxer.start(); muxerStarted = true
                         }
                     }
                     outIdx >= 0 -> {
                         if (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0
                             && info.size > 0 && muxerStarted) {
                             if (info.presentationTimeUs == 0L) info.presentationTimeUs = endPts
-                            muxer.writeSampleData(trackIndex, codec.getOutputBuffer(outIdx)!!, info)
+                            muxer.writeSampleData(trackIndex,
+                                codec.getOutputBuffer(outIdx)!!, info)
                         }
                         codec.releaseOutputBuffer(outIdx, false)
                         if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) eos = true
