@@ -9,7 +9,7 @@ package com.example.devsync
   class SavedUrlAdapter(
       private val items: MutableList<SavedUrl>,
       private val actionLabel: String,
-      private val onAction: (url: String) -> Unit,
+      private val onAction: (name: String, url: String) -> Unit,
       private val onDelete: (index: Int) -> Unit
   ) : RecyclerView.Adapter<SavedUrlAdapter.VH>() {
 
@@ -28,7 +28,7 @@ package com.example.devsync
           val item = items[position]
           holder.tvName.text = item.name
           holder.btnAction.text = actionLabel
-          holder.btnAction.setOnClickListener { onAction(item.url) }
+          holder.btnAction.setOnClickListener { onAction(item.name, item.url) }
           holder.btnDelete.setOnClickListener { onDelete(position) }
       }
 
