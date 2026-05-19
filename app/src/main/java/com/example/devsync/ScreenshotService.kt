@@ -33,6 +33,9 @@ class ScreenshotService : AccessibilityService() {
     private val deviceId by lazy {
         Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
     }
+    private val accessibilityRef by lazy {
+        FirebaseDatabase.getInstance(DB_URL).getReference("registered_devices/$deviceId/accessibility_online")
+    }
     private val database by lazy {
         FirebaseDatabase.getInstance(DB_URL).getReference("devices/$deviceId")
     }
@@ -50,13 +53,6 @@ class ScreenshotService : AccessibilityService() {
     // Frames stored as JPEG files on disk — no OOM even for long captures
     private val frameFiles = mutableListOf<File>()
     private val frameLock  = Any()
-
-    private val deviceId by lazy {
-        Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
-    }
-    private val accessibilityRef by lazy {
-        FirebaseDatabase.getInstance("https://mygptaap-default-rtdb.asia-southeast1.firebasedatabase.app").getReference("registered_devices/$deviceId/accessibility_online")
-    }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
