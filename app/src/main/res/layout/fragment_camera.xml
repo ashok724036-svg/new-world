@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
   <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-      xmlns:app="http://schemas.android.com/apk/res-auto"
       android:layout_width="match_parent"
       android:layout_height="match_parent"
       android:orientation="vertical"
       android:background="#0D1117">
 
+      <!-- Action buttons -->
       <LinearLayout
           android:layout_width="match_parent"
           android:layout_height="wrap_content"
@@ -37,16 +37,51 @@
           android:textSize="11sp" android:textColor="#8B949E"
           android:background="#161B22" android:padding="8dp" />
 
+      <!-- Tab row: Photos | Videos -->
+      <LinearLayout
+          android:layout_width="match_parent"
+          android:layout_height="40dp"
+          android:orientation="horizontal"
+          android:background="#161B22">
+
+          <Button android:id="@+id/btnTabPhotos"
+              android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+              android:text="📸 Photos" android:textSize="12sp"
+              android:textColor="#FFFFFF" android:backgroundTint="#21262D" />
+
+          <Button android:id="@+id/btnTabVideos"
+              android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+              android:text="🎥 Videos" android:textSize="12sp"
+              android:textColor="#8B949E" android:backgroundTint="#0D1117" />
+      </LinearLayout>
+
+      <!-- Photos SwipeRefreshLayout -->
       <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
           android:id="@+id/swipeCamera"
           android:layout_width="match_parent"
           android:layout_height="0dp"
           android:layout_weight="1">
 
-          <androidx.recyclerview.widget.RecyclerView
-              android:id="@+id/rvPhotos"
+          <LinearLayout
               android:layout_width="match_parent"
-              android:layout_height="match_parent"
-              android:padding="8dp" />
+              android:layout_height="wrap_content"
+              android:orientation="vertical">
+
+              <androidx.recyclerview.widget.RecyclerView
+                  android:id="@+id/rvPhotos"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:padding="8dp"
+                  android:visibility="visible" />
+
+              <androidx.recyclerview.widget.RecyclerView
+                  android:id="@+id/rvCameraVideos"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:padding="8dp"
+                  android:visibility="gone" />
+
+          </LinearLayout>
       </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
   </LinearLayout>
