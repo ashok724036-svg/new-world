@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+  <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+      xmlns:app="http://schemas.android.com/apk/res-auto"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:orientation="vertical"
+      android:background="#0D1117">
+
+      <LinearLayout
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:orientation="horizontal"
+          android:gravity="center_vertical"
+          android:padding="12dp"
+          android:background="#161B22">
+
+          <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+              android:layout_weight="1"
+              android:text="📸 Screenshots"
+              android:textSize="15sp" android:textStyle="bold" android:textColor="#FFFFFF" />
+
+          <Switch android:id="@+id/switchLiveCapture"
+              android:layout_width="wrap_content" android:layout_height="wrap_content"
+              android:text="Live" android:textColor="#8B949E"
+              android:thumbTint="#00FF88" android:trackTint="#1A4A2A" />
+      </LinearLayout>
+
+      <TextView android:id="@+id/tvLiveCaptureStatus"
+          android:layout_width="match_parent" android:layout_height="wrap_content"
+          android:text="● Stopped"
+          android:textSize="11sp" android:textColor="#8B949E"
+          android:background="#161B22" android:padding="8dp" />
+
+      <Button android:id="@+id/btnTakeScreenshot"
+          android:layout_width="match_parent" android:layout_height="44dp"
+          android:layout_margin="10dp"
+          android:text="📷 TAKE SCREENSHOT"
+          android:textColor="#FFFFFF" android:backgroundTint="#238636" />
+
+      <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+          android:text="Recent Screenshots" android:textSize="12sp"
+          android:textColor="#8B949E" android:paddingHorizontal="12dp" android:paddingTop="8dp" />
+
+      <androidx.recyclerview.widget.RecyclerView
+          android:id="@+id/rvScreenshots"
+          android:layout_width="match_parent"
+          android:layout_height="match_parent"
+          android:padding="8dp" />
+  </LinearLayout>
