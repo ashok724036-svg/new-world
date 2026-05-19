@@ -73,7 +73,6 @@
           app:menu="@menu/admin_bottom_nav"
           app:itemIconTint="#8B949E"
           app:itemTextColor="#8B949E"
-          app:itemActiveIndicatorColor="#21262D"
-          app:labelVisibilityMode="labeled" />
+            app:labelVisibilityMode="labeled" />
 
   </LinearLayout>
