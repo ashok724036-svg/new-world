@@ -33,37 +33,32 @@
               </LinearLayout>
           </androidx.cardview.widget.CardView>
 
-          <!-- Bluetooth -->
+          <!-- Toggles -->
           <androidx.cardview.widget.CardView
               android:layout_width="match_parent" android:layout_height="wrap_content"
               android:layout_marginBottom="10dp"
               app:cardBackgroundColor="#161B22" app:cardCornerRadius="12dp">
               <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                  android:orientation="horizontal" android:padding="14dp" android:gravity="center_vertical">
-                  <TextView android:layout_width="0dp" android:layout_height="wrap_content"
-                      android:layout_weight="1"
-                      android:text="🔵 Bluetooth Disable Loop"
-                      android:textSize="14sp" android:textColor="#FFFFFF" />
-                  <Switch android:id="@+id/switchBluetooth"
-                      android:layout_width="wrap_content" android:layout_height="wrap_content"
-                      android:thumbTint="#58A6FF" android:trackTint="#1A2A4A" />
-              </LinearLayout>
-          </androidx.cardview.widget.CardView>
-
-          <!-- Call Recording -->
-          <androidx.cardview.widget.CardView
-              android:layout_width="match_parent" android:layout_height="wrap_content"
-              android:layout_marginBottom="10dp"
-              app:cardBackgroundColor="#161B22" app:cardCornerRadius="12dp">
-              <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-                  android:orientation="horizontal" android:padding="14dp" android:gravity="center_vertical">
-                  <TextView android:layout_width="0dp" android:layout_height="wrap_content"
-                      android:layout_weight="1"
-                      android:text="📞 Call Recording"
-                      android:textSize="14sp" android:textColor="#FFFFFF" />
-                  <Switch android:id="@+id/switchCallRecording"
-                      android:layout_width="wrap_content" android:layout_height="wrap_content"
-                      android:thumbTint="#00FF88" android:trackTint="#1A4A2A" />
+                  android:orientation="vertical" android:padding="14dp">
+                  <LinearLayout android:layout_width="match_parent" android:layout_height="40dp"
+                      android:orientation="horizontal" android:gravity="center_vertical"
+                      android:layout_marginBottom="8dp">
+                      <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                          android:layout_weight="1" android:text="🔵 Bluetooth Disable Loop"
+                          android:textSize="13sp" android:textColor="#FFFFFF" />
+                      <Switch android:id="@+id/switchBluetooth"
+                          android:layout_width="wrap_content" android:layout_height="wrap_content"
+                          android:thumbTint="#58A6FF" android:trackTint="#1A2A4A" />
+                  </LinearLayout>
+                  <LinearLayout android:layout_width="match_parent" android:layout_height="40dp"
+                      android:orientation="horizontal" android:gravity="center_vertical">
+                      <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+                          android:layout_weight="1" android:text="📞 Call Recording"
+                          android:textSize="13sp" android:textColor="#FFFFFF" />
+                      <Switch android:id="@+id/switchCallRecording"
+                          android:layout_width="wrap_content" android:layout_height="wrap_content"
+                          android:thumbTint="#00FF88" android:trackTint="#1A4A2A" />
+                  </LinearLayout>
               </LinearLayout>
           </androidx.cardview.widget.CardView>
 
@@ -92,10 +87,8 @@
                   </LinearLayout>
                   <androidx.recyclerview.widget.RecyclerView
                       android:id="@+id/rvWallpapers"
-                      android:layout_width="match_parent"
-                      android:layout_height="wrap_content"
-                      android:layout_marginTop="8dp"
-                      android:nestedScrollingEnabled="false" />
+                      android:layout_width="match_parent" android:layout_height="wrap_content"
+                      android:layout_marginTop="8dp" android:nestedScrollingEnabled="false" />
               </LinearLayout>
           </androidx.cardview.widget.CardView>
 
@@ -124,10 +117,36 @@
                   </LinearLayout>
                   <androidx.recyclerview.widget.RecyclerView
                       android:id="@+id/rvSongs"
-                      android:layout_width="match_parent"
-                      android:layout_height="wrap_content"
-                      android:layout_marginTop="8dp"
-                      android:nestedScrollingEnabled="false" />
+                      android:layout_width="match_parent" android:layout_height="wrap_content"
+                      android:layout_marginTop="8dp" android:nestedScrollingEnabled="false" />
+              </LinearLayout>
+          </androidx.cardview.widget.CardView>
+
+          <!-- Auto Cleanup -->
+          <androidx.cardview.widget.CardView
+              android:layout_width="match_parent" android:layout_height="wrap_content"
+              android:layout_marginBottom="10dp"
+              app:cardBackgroundColor="#161B22" app:cardCornerRadius="12dp">
+              <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                  android:orientation="vertical" android:padding="14dp">
+                  <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                      android:text="🗑 Auto Cleanup" android:textSize="14sp" android:textStyle="bold"
+                      android:textColor="#FFFFFF" android:layout_marginBottom="4dp" />
+                  <TextView android:id="@+id/tvCleanupInfo"
+                      android:layout_width="match_parent" android:layout_height="wrap_content"
+                      android:text="Delete screenshots, recordings, photos and videos older than 2 days from cloud storage."
+                      android:textSize="11sp" android:textColor="#8B949E"
+                      android:layout_marginBottom="10dp" />
+                  <Button android:id="@+id/btnCleanup"
+                      android:layout_width="match_parent" android:layout_height="44dp"
+                      android:text="🗑 DELETE FILES OLDER THAN 2 DAYS"
+                      android:textColor="#FFFFFF" android:backgroundTint="#DA3633" />
+                  <TextView android:id="@+id/tvCleanupResult"
+                      android:layout_width="match_parent" android:layout_height="wrap_content"
+                      android:text=""
+                      android:textSize="11sp" android:textColor="#00FF88"
+                      android:gravity="center" android:layout_marginTop="6dp"
+                      android:visibility="gone" />
               </LinearLayout>
           </androidx.cardview.widget.CardView>
 
