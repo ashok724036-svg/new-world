@@ -5,6 +5,7 @@
       android:orientation="vertical"
       android:background="#0D1117">
 
+      <!-- Header row -->
       <LinearLayout
           android:layout_width="match_parent"
           android:layout_height="wrap_content"
@@ -15,7 +16,7 @@
 
           <TextView android:layout_width="0dp" android:layout_height="wrap_content"
               android:layout_weight="1"
-              android:text="📸 Screenshots"
+              android:text="🕵 Spy"
               android:textSize="15sp" android:textStyle="bold" android:textColor="#FFFFFF" />
 
           <Switch android:id="@+id/switchLiveCapture"
@@ -30,32 +31,65 @@
               android:textColor="#58A6FF" android:backgroundTint="#0D1E3A" />
       </LinearLayout>
 
+      <!-- Status bar -->
       <TextView android:id="@+id/tvLiveCaptureStatus"
           android:layout_width="match_parent" android:layout_height="wrap_content"
           android:text="● Stopped"
           android:textSize="11sp" android:textColor="#8B949E"
           android:background="#161B22" android:padding="8dp" />
 
+      <!-- Take Screenshot button -->
       <Button android:id="@+id/btnTakeScreenshot"
           android:layout_width="match_parent" android:layout_height="44dp"
-          android:layout_margin="10dp"
-          android:text="📷 TAKE SCREENSHOT"
+          android:layout_marginHorizontal="10dp" android:layout_marginTop="8dp"
+          android:text="📷 TAKE SCREENSHOT NOW"
           android:textColor="#FFFFFF" android:backgroundTint="#238636" />
 
-      <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-          android:text="Recent Screenshots" android:textSize="12sp"
-          android:textColor="#8B949E" android:paddingHorizontal="12dp" android:paddingTop="4dp" />
+      <!-- Tab row: Screenshots | Live Videos -->
+      <LinearLayout
+          android:layout_width="match_parent"
+          android:layout_height="40dp"
+          android:orientation="horizontal"
+          android:layout_marginTop="8dp"
+          android:background="#161B22">
 
+          <Button android:id="@+id/btnTabScreenshots"
+              android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+              android:text="📸 Screenshots" android:textSize="12sp"
+              android:textColor="#FFFFFF" android:backgroundTint="#21262D" />
+
+          <Button android:id="@+id/btnTabLiveVideos"
+              android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+              android:text="🎬 Live Videos" android:textSize="12sp"
+              android:textColor="#8B949E" android:backgroundTint="#0D1117" />
+      </LinearLayout>
+
+      <!-- Shared SwipeRefreshLayout -->
       <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
           android:id="@+id/swipeSpy"
           android:layout_width="match_parent"
           android:layout_height="0dp"
           android:layout_weight="1">
 
-          <androidx.recyclerview.widget.RecyclerView
-              android:id="@+id/rvScreenshots"
+          <LinearLayout
               android:layout_width="match_parent"
-              android:layout_height="match_parent"
-              android:padding="8dp" />
+              android:layout_height="wrap_content"
+              android:orientation="vertical">
+
+              <androidx.recyclerview.widget.RecyclerView
+                  android:id="@+id/rvScreenshots"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:padding="8dp"
+                  android:visibility="visible" />
+
+              <androidx.recyclerview.widget.RecyclerView
+                  android:id="@+id/rvLiveVideos"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:padding="8dp"
+                  android:visibility="gone" />
+
+          </LinearLayout>
       </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
   </LinearLayout>
