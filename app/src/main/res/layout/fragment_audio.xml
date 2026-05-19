@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+  <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+      xmlns:app="http://schemas.android.com/apk/res-auto"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:orientation="vertical"
+      android:background="#0D1117">
+
+      <LinearLayout
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:orientation="horizontal"
+          android:padding="10dp"
+          android:background="#161B22">
+
+          <LinearLayout
+              android:layout_width="0dp" android:layout_height="wrap_content"
+              android:layout_weight="1" android:orientation="vertical"
+              android:layout_marginEnd="8dp">
+
+              <EditText android:id="@+id/etRecordDuration"
+                  android:layout_width="match_parent" android:layout_height="38dp"
+                  android:hint="Duration (sec)" android:textColor="#FFFFFF"
+                  android:textColorHint="#8B949E" android:inputType="number"
+                  android:background="#21262D" android:paddingHorizontal="8dp"
+                  android:textSize="13sp" android:text="30" />
+          </LinearLayout>
+
+          <Button android:id="@+id/btnStartRecording"
+              android:layout_width="wrap_content" android:layout_height="38dp"
+              android:text="⏺ START" android:textSize="11sp"
+              android:textColor="#FFFFFF" android:backgroundTint="#238636"
+              android:layout_marginEnd="6dp" />
+
+          <Button android:id="@+id/btnStopRecording"
+              android:layout_width="wrap_content" android:layout_height="38dp"
+              android:text="⏹ STOP" android:textSize="11sp"
+              android:textColor="#FFFFFF" android:backgroundTint="#DA3633" />
+      </LinearLayout>
+
+      <TextView android:id="@+id/tvRecordingStatus"
+          android:layout_width="match_parent" android:layout_height="wrap_content"
+          android:text="● Mic: Idle"
+          android:textSize="11sp" android:textColor="#8B949E"
+          android:background="#161B22" android:padding="8dp" />
+
+      <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+          android:id="@+id/swipeAudio"
+          android:layout_width="match_parent"
+          android:layout_height="0dp"
+          android:layout_weight="1">
+
+          <androidx.recyclerview.widget.RecyclerView
+              android:id="@+id/rvRecordings"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:padding="8dp" />
+      </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+  </LinearLayout>
