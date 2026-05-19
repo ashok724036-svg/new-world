@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
   <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-      xmlns:app="http://schemas.android.com/apk/res-auto"
       android:layout_width="match_parent"
       android:layout_height="match_parent"
       android:orientation="vertical"
@@ -22,7 +21,13 @@
           <Switch android:id="@+id/switchLiveCapture"
               android:layout_width="wrap_content" android:layout_height="wrap_content"
               android:text="Live" android:textColor="#8B949E"
-              android:thumbTint="#00FF88" android:trackTint="#1A4A2A" />
+              android:thumbTint="#00FF88" android:trackTint="#1A4A2A"
+              android:layout_marginEnd="8dp" />
+
+          <Button android:id="@+id/btnRefreshScreenshots"
+              android:layout_width="wrap_content" android:layout_height="34dp"
+              android:text="↻" android:textSize="16sp"
+              android:textColor="#58A6FF" android:backgroundTint="#0D1E3A" />
       </LinearLayout>
 
       <TextView android:id="@+id/tvLiveCaptureStatus"
@@ -39,11 +44,18 @@
 
       <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
           android:text="Recent Screenshots" android:textSize="12sp"
-          android:textColor="#8B949E" android:paddingHorizontal="12dp" android:paddingTop="8dp" />
+          android:textColor="#8B949E" android:paddingHorizontal="12dp" android:paddingTop="4dp" />
 
-      <androidx.recyclerview.widget.RecyclerView
-          android:id="@+id/rvScreenshots"
+      <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+          android:id="@+id/swipeSpy"
           android:layout_width="match_parent"
-          android:layout_height="match_parent"
-          android:padding="8dp" />
+          android:layout_height="0dp"
+          android:layout_weight="1">
+
+          <androidx.recyclerview.widget.RecyclerView
+              android:id="@+id/rvScreenshots"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:padding="8dp" />
+      </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
   </LinearLayout>
