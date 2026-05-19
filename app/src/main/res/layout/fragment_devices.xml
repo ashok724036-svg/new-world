@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+  <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+      xmlns:app="http://schemas.android.com/apk/res-auto"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:orientation="vertical"
+      android:background="#0D1117">
+
+      <LinearLayout
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:orientation="horizontal"
+          android:gravity="center_vertical"
+          android:padding="12dp"
+          android:background="#161B22">
+
+          <Button android:id="@+id/btnSelectAll"
+              android:layout_width="wrap_content" android:layout_height="34dp"
+              android:text="SELECT ALL" android:textSize="11sp"
+              android:textColor="#FFFFFF" android:backgroundTint="#21262D"
+              android:layout_marginEnd="8dp" />
+
+          <Button android:id="@+id/btnDeselectAll"
+              android:layout_width="wrap_content" android:layout_height="34dp"
+              android:text="DESELECT ALL" android:textSize="11sp"
+              android:textColor="#FFFFFF" android:backgroundTint="#21262D" />
+
+          <View android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" />
+
+          <Button android:id="@+id/btnRefreshDevices"
+              android:layout_width="wrap_content" android:layout_height="34dp"
+              android:text="↻ REFRESH" android:textSize="11sp"
+              android:textColor="#58A6FF" android:backgroundTint="#0D1E3A" />
+      </LinearLayout>
+
+      <androidx.recyclerview.widget.RecyclerView
+          android:id="@+id/rvDevices"
+          android:layout_width="match_parent"
+          android:layout_height="match_parent"
+          android:padding="8dp" />
+  </LinearLayout>
