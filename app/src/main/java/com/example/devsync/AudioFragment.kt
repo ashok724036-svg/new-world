@@ -18,6 +18,7 @@ package com.example.devsync
       private lateinit var adapter: RecordingListAdapter
       private lateinit var tvStatus: TextView
       private val recordingList = mutableListOf<RecordingItem>()
+    private lateinit var swipeAudio: SwipeRefreshLayout
 
       override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
           super.onViewCreated(view, savedInstanceState)
@@ -46,8 +47,9 @@ package com.example.devsync
               tvStatus.setTextColor(0xFF8B949E.toInt())
           }
 
-          view.findViewById<SwipeRefreshLayout>(R.id.swipeAudio).setOnRefreshListener {
-              loadRecordings { view.findViewById<SwipeRefreshLayout>(R.id.swipeAudio).isRefreshing = false }
+          swipeAudio = view.findViewById(R.id.swipeAudio)
+        swipeAudio.setOnRefreshListener {
+              loadRecordings { swipeAudio.isRefreshing = false }
           }
 
           loadRecordings(null)
