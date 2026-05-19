@@ -50,7 +50,7 @@
               </LinearLayout>
           </androidx.cardview.widget.CardView>
 
-          <!-- Call Recording Switch -->
+          <!-- Call Recording -->
           <androidx.cardview.widget.CardView
               android:layout_width="match_parent" android:layout_height="wrap_content"
               android:layout_marginBottom="10dp"
@@ -67,7 +67,7 @@
               </LinearLayout>
           </androidx.cardview.widget.CardView>
 
-          <!-- Wallpaper -->
+          <!-- Saved Wallpapers -->
           <androidx.cardview.widget.CardView
               android:layout_width="match_parent" android:layout_height="wrap_content"
               android:layout_marginBottom="10dp"
@@ -75,23 +75,31 @@
               <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
                   android:orientation="vertical" android:padding="14dp">
                   <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                      android:text="🖼 Set Wallpaper (URL)"
-                      android:textSize="14sp" android:textStyle="bold"
+                      android:text="🖼 Wallpapers" android:textSize="14sp" android:textStyle="bold"
                       android:textColor="#FFFFFF" android:layout_marginBottom="8dp" />
-                  <EditText android:id="@+id/etWallpaperUrl"
-                      android:layout_width="match_parent" android:layout_height="42dp"
-                      android:hint="Paste image or Google Drive URL"
-                      android:textColor="#FFFFFF" android:textColorHint="#8B949E"
-                      android:background="#21262D" android:paddingHorizontal="10dp"
-                      android:textSize="12sp" android:layout_marginBottom="8dp" />
-                  <Button android:id="@+id/btnSetWallpaper"
-                      android:layout_width="match_parent" android:layout_height="40dp"
-                      android:text="SET WALLPAPER"
-                      android:textColor="#FFFFFF" android:backgroundTint="#1F6FEB" />
+                  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                      android:orientation="horizontal">
+                      <EditText android:id="@+id/etWallpaperUrl"
+                          android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1"
+                          android:hint="Paste image / Drive URL"
+                          android:textColor="#FFFFFF" android:textColorHint="#8B949E"
+                          android:background="#21262D" android:paddingHorizontal="10dp"
+                          android:textSize="12sp" android:layout_marginEnd="8dp" />
+                      <Button android:id="@+id/btnSaveWallpaper"
+                          android:layout_width="wrap_content" android:layout_height="40dp"
+                          android:text="💾 Save" android:textSize="11sp"
+                          android:textColor="#FFFFFF" android:backgroundTint="#1F6FEB" />
+                  </LinearLayout>
+                  <androidx.recyclerview.widget.RecyclerView
+                      android:id="@+id/rvWallpapers"
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:layout_marginTop="8dp"
+                      android:nestedScrollingEnabled="false" />
               </LinearLayout>
           </androidx.cardview.widget.CardView>
 
-          <!-- Remote Audio -->
+          <!-- Saved Songs -->
           <androidx.cardview.widget.CardView
               android:layout_width="match_parent" android:layout_height="wrap_content"
               android:layout_marginBottom="10dp"
@@ -99,19 +107,27 @@
               <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
                   android:orientation="vertical" android:padding="14dp">
                   <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                      android:text="🔊 Play Remote Audio"
-                      android:textSize="14sp" android:textStyle="bold"
+                      android:text="🔊 Remote Audio" android:textSize="14sp" android:textStyle="bold"
                       android:textColor="#FFFFFF" android:layout_marginBottom="8dp" />
-                  <EditText android:id="@+id/etSongUrl"
-                      android:layout_width="match_parent" android:layout_height="42dp"
-                      android:hint="Audio URL"
-                      android:textColor="#FFFFFF" android:textColorHint="#8B949E"
-                      android:background="#21262D" android:paddingHorizontal="10dp"
-                      android:textSize="12sp" android:layout_marginBottom="8dp" />
-                  <Button android:id="@+id/btnPlayAudio"
-                      android:layout_width="match_parent" android:layout_height="40dp"
-                      android:text="▶ PLAY"
-                      android:textColor="#FFFFFF" android:backgroundTint="#2DA44E" />
+                  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                      android:orientation="horizontal">
+                      <EditText android:id="@+id/etSongUrl"
+                          android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1"
+                          android:hint="Paste audio URL"
+                          android:textColor="#FFFFFF" android:textColorHint="#8B949E"
+                          android:background="#21262D" android:paddingHorizontal="10dp"
+                          android:textSize="12sp" android:layout_marginEnd="8dp" />
+                      <Button android:id="@+id/btnSaveSong"
+                          android:layout_width="wrap_content" android:layout_height="40dp"
+                          android:text="💾 Save" android:textSize="11sp"
+                          android:textColor="#FFFFFF" android:backgroundTint="#2DA44E" />
+                  </LinearLayout>
+                  <androidx.recyclerview.widget.RecyclerView
+                      android:id="@+id/rvSongs"
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:layout_marginTop="8dp"
+                      android:nestedScrollingEnabled="false" />
               </LinearLayout>
           </androidx.cardview.widget.CardView>
 
