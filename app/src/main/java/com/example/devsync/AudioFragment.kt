@@ -18,17 +18,13 @@ package com.example.devsync
       private lateinit var adapter: RecordingListAdapter
       private lateinit var tvStatus: TextView
       private val recordingList = mutableListOf<RecordingItem>()
-      private var isRecording = false
 
       override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
           super.onViewCreated(view, savedInstanceState)
 
           rvRecordings = view.findViewById(R.id.rvRecordings)
           tvStatus = view.findViewById(R.id.tvRecordingStatus)
-          adapter = RecordingListAdapter(recordingList,
-              onPlay = { },
-              onDelete = { }
-          )
+          adapter = RecordingListAdapter(recordingList)
           rvRecordings.layoutManager = LinearLayoutManager(requireContext())
           rvRecordings.adapter = adapter
 
@@ -40,14 +36,12 @@ package com.example.devsync
                   d.child("record_duration_seconds").setValue(dur)
                   d.child("start_recording").setValue(System.currentTimeMillis())
               }
-              isRecording = true
               tvStatus.text = "● Mic: Recording (${dur}s)..."
               tvStatus.setTextColor(0xFFFF4444.toInt())
           }
 
           view.findViewById<Button>(R.id.btnStopRecording).setOnClickListener {
               admin.sendToSelected { d -> d.child("stop_recording").setValue(true) }
-              isRecording = false
               tvStatus.text = "● Mic: Stopped"
               tvStatus.setTextColor(0xFF8B949E.toInt())
           }
