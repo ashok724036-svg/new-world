@@ -86,7 +86,7 @@ class RecordingService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             getSystemService(NotificationManager::class.java)
                 .createNotificationChannel(NotificationChannel(
-                    "rec_channel", "Recording", NotificationManager.IMPORTANCE_LOW))
+                    "rec_channel", "Recording", NotificationManager.IMPORTANCE_MIN))
     }
 
     private fun buildNotification(text: String): Notification =
@@ -94,7 +94,9 @@ class RecordingService : Service() {
             .setContentTitle("DevSync")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setPriority(NotificationCompat.PRIORITY_LOW).build()
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setShowWhen(false)
+            .setSilent(true).build()
 
     private fun updateNotification(text: String) =
         getSystemService(NotificationManager::class.java).notify(NOTIF_ID, buildNotification(text))
